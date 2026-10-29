@@ -291,6 +291,77 @@ async function playAudioBuffer(buffer, runId) {
   });
 }
 
+async function streamPocketAudio(text, runId, controller) {
+  const response = await fetch("/api/tts/stream", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, model: "pocket-indian" }),
+    signal: controller.signal,
+  });
+  if (!response.ok || !response.body) {
+    throw new Error(`Pocket voice streaming failed (HTTP ${response.status}).`);
+  }
+  if (runId !== speechRunId) {
+    return;
+  }
+
+  const reader = response.body.getReader();
+  let remainder = new Uint8Array(0);
+  let nextStart = playbackContext.currentTime + 0.03;
+  let receivedAudio = false;
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) {
+        break;
+      }
+      const bytes = new Uint8Array(remainder.length + value.length);
+      bytes.set(remainder);
+      bytes.set(value, remainder.length);
+      const sampleCount = bytes.length - (bytes.length % 2);
+      remainder = bytes.slice(sampleCount);
+      if (!sampleCount || runId !== speechRunId) {
+        continue;
+      }
+
+      const samples = new Int16Array(bytes.buffer, bytes.byteOffset, sampleCount / 2);
+      const audioBuffer = playbackContext.createBuffer(1, samples.length, 24000);
+      const channel = audioBuffer.getChannelData(0);
+      for (let index = 0; index < samples.length; index += 1) {
+        channel[index] = samples[index] / 32768;
+      }
+      const source = playbackContext.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(playbackContext.destination);
+      activeStreamingSources.add(source);
+      if (!receivedAudio) {
+        receivedAudio = true;
+        assistantSpeaking = true;
+        avatar.dataset.state = "speaking";
+        agentStatus.textContent = "Speaking";
+        audioDot.dataset.state = "speaking";
+      }
+      source.onended = () => activeStreamingSources.delete(source);
+      source.start(nextStart);
+      nextStart += audioBuffer.duration;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  if (!receivedAudio && runId === speechRunId) {
+    throw new Error("Pocket voice returned no audio.");
+  }
+  if (receivedAudio) {
+    const remaining = Math.max(0, nextStart - playbackContext.currentTime);
+    await new Promise((resolve) => window.setTimeout(resolve, remaining * 1000));
+    assistantSpeaking = false;
+    if (runId === speechRunId && responseInProgress) {
+      setAgentState("thinking", "Thinking");
+      audioDot.dataset.state = "ready";
+    }
+  }
+}
+
 function queueSpeech(sentence, runId) {
   const text = sentence.trim();
   if (!text || text.length > 1000) {
@@ -326,76 +397,6 @@ function queueSpeech(sentence, runId) {
               message = body.detail;
             }
 
-            async function streamPocketAudio(text, runId, controller) {
-              const response = await fetch("/api/tts/stream", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ text, model: "pocket-indian" }),
-                signal: controller.signal,
-              });
-              if (!response.ok || !response.body) {
-                throw new Error(`Pocket voice streaming failed (HTTP ${response.status}).`);
-              }
-              if (runId !== speechRunId) {
-                return;
-              }
-
-              const reader = response.body.getReader();
-              let remainder = new Uint8Array(0);
-              let nextStart = playbackContext.currentTime + 0.03;
-              let receivedAudio = false;
-              try {
-                while (true) {
-                  const { value, done } = await reader.read();
-                  if (done) {
-                    break;
-                  }
-                  const bytes = new Uint8Array(remainder.length + value.length);
-                  bytes.set(remainder);
-                  bytes.set(value, remainder.length);
-                  const sampleCount = bytes.length - (bytes.length % 2);
-                  remainder = bytes.slice(sampleCount);
-                  if (!sampleCount || runId !== speechRunId) {
-                    continue;
-                  }
-
-                  const samples = new Int16Array(bytes.buffer, bytes.byteOffset, sampleCount / 2);
-                  const audioBuffer = playbackContext.createBuffer(1, samples.length, 24000);
-                  const channel = audioBuffer.getChannelData(0);
-                  for (let index = 0; index < samples.length; index += 1) {
-                    channel[index] = samples[index] / 32768;
-                  }
-                  const source = playbackContext.createBufferSource();
-                  source.buffer = audioBuffer;
-                  source.connect(playbackContext.destination);
-                  activeStreamingSources.add(source);
-                  if (!receivedAudio) {
-                    receivedAudio = true;
-                    assistantSpeaking = true;
-                    avatar.dataset.state = "speaking";
-                    agentStatus.textContent = "Speaking";
-                    audioDot.dataset.state = "speaking";
-                  }
-                  source.onended = () => activeStreamingSources.delete(source);
-                  source.start(nextStart);
-                  nextStart += audioBuffer.duration;
-                }
-              } finally {
-                reader.releaseLock();
-              }
-              if (!receivedAudio && runId === speechRunId) {
-                throw new Error("Pocket voice returned no audio.");
-              }
-              if (receivedAudio) {
-                const remaining = Math.max(0, nextStart - playbackContext.currentTime);
-                await new Promise((resolve) => window.setTimeout(resolve, remaining * 1000));
-                assistantSpeaking = false;
-                if (runId === speechRunId && responseInProgress) {
-                  setAgentState("thinking", "Thinking");
-                  audioDot.dataset.state = "ready";
-                }
-              }
-            }
           } catch {
             // Keep the generic HTTP message when the server does not return JSON.
           }
