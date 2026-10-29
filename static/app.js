@@ -271,6 +271,10 @@ function finishSttTurn() {
   } else {
     closeSttSocket();
   }
+
+  function hasPendingTurn() {
+    return responseInProgress || responseQueueRunning || responseQueue.length > 0;
+  }
 }
 
 async function playAudioBuffer(buffer, runId) {
@@ -696,10 +700,10 @@ async function processResponseQueue() {
     }
   } finally {
     responseQueueRunning = false;
-    if (listeningRequested && !microphoneActive && !sttSocket && !responseInProgress) {
+    if (listeningRequested && !microphoneActive && !sttSocket && !hasPendingTurn()) {
       window.clearTimeout(sttReconnectTimer);
       sttReconnectTimer = window.setTimeout(() => {
-        if (listeningRequested && !microphoneActive && !responseInProgress) {
+        if (listeningRequested && !microphoneActive && !hasPendingTurn()) {
           void startMicrophone();
         }
       }, 0);
@@ -747,8 +751,9 @@ async function startMicrophone() {
   firstAudioCapturedAt = null;
 
   const websocketProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  sttSocket = new WebSocket(`${websocketProtocol}//${window.location.host}/api/stt`);
-  sttSocket.binaryType = "arraybuffer";
+  const socket = new WebSocket(`${websocketProtocol}//${window.location.host}/api/stt`);
+  sttSocket = socket;
+  socket.binaryType = "arraybuffer";
   sttReadyResolve = null;
   sttReadyReject = null;
   const readyPromise = new Promise((resolve, reject) => {
@@ -757,14 +762,14 @@ async function startMicrophone() {
   });
   let readyTimeout;
 
-  sttSocket.onopen = () => {
+  socket.onopen = () => {
     try {
-      sttSocket.send(JSON.stringify({ type: "start" }));
+      socket.send(JSON.stringify({ type: "start" }));
     } catch (error) {
       sttReadyReject?.(error);
     }
   };
-  sttSocket.onmessage = (message) => {
+  socket.onmessage = (message) => {
     try {
       handleSttEvent(JSON.parse(message.data));
     } catch (error) {
@@ -774,7 +779,7 @@ async function startMicrophone() {
       sttReadyReject?.(error);
     }
   };
-  sttSocket.onerror = () => {
+  socket.onerror = () => {
     sttReadyReject?.(new Error("Speech connection failed. Check the backend, API key, and network connection."));
     if (!sttHadError) {
       sttHadError = true;
@@ -782,7 +787,10 @@ async function startMicrophone() {
       setAgentState("error", "Speech connection error");
     }
   };
-  sttSocket.onclose = async () => {
+  socket.onclose = async () => {
+    if (sttSocket !== socket) {
+      return;
+    }
     sttReadyReject?.(new Error("The speech connection closed before recognition became ready."));
     sttReadyResolve = null;
     sttReadyReject = null;
@@ -802,14 +810,14 @@ async function startMicrophone() {
     } else if (!responseInProgress) {
       setAgentState("idle", "Ready when you are");
     }
-    if (sttHadError && sttCloseReason !== "turn" && listeningRequested && !responseInProgress
+    if (sttHadError && sttCloseReason !== "turn" && listeningRequested && !hasPendingTurn()
       && sttReconnectAttempts < 3) {
       const delay = 500 * (2 ** sttReconnectAttempts);
       sttReconnectAttempts += 1;
       setAgentState("connecting", `Reconnecting to speech recognition (${sttReconnectAttempts}/3)`);
       window.clearTimeout(sttReconnectTimer);
       sttReconnectTimer = window.setTimeout(() => {
-        if (listeningRequested && !microphoneActive && !responseInProgress) {
+        if (listeningRequested && !microphoneActive && !hasPendingTurn()) {
           void startMicrophone();
         }
       }, delay);
@@ -841,7 +849,7 @@ async function startMicrophone() {
       autoGainControl: true,
     },
   });
-  if (!sttSocket || sttSocket.readyState !== WebSocket.OPEN) {
+  if (sttSocket !== socket || socket.readyState !== WebSocket.OPEN) {
     stopMicrophone();
     throw new Error("Speech recognition disconnected before microphone capture started. Please try again.");
   }
@@ -933,8 +941,8 @@ function handleSttEvent(event) {
     case "speechComplete":
       if (!assistantSpeaking && !responseInProgress
         && typeof event.transcript === "string" && event.transcript.trim()) {
-        finishSttTurn();
         enqueueTurn(event.transcript);
+        finishSttTurn();
       }
       break;
     case "sessionComplete":
