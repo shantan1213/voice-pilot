@@ -237,17 +237,17 @@ py -3.12 -m venv .venv
 python -m pip install -r requirements.txt
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 notepad .env
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8002
 ```
 
-Open `http://127.0.0.1:8000` and allow microphone access. In a second
+Open `http://127.0.0.1:8002` and allow microphone access. In a second
 PowerShell window:
 
 ```powershell
 Set-Location C:\Users\shant\Projects\callpilot
 .\.venv\Scripts\Activate.ps1
 python -m unittest discover -s tests -v
-Invoke-RestMethod http://127.0.0.1:8000/api/health
+Invoke-RestMethod http://127.0.0.1:8002/api/health
 ```
 
 Troubleshooting:

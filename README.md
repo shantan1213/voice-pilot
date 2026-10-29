@@ -131,10 +131,10 @@ From the repository root:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8002
 ```
 
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000), allow microphone access,
+Open [http://127.0.0.1:8002](http://127.0.0.1:8002), allow microphone access,
 and press the microphone button. The status shows Listening, Thinking, and
 Speaking while the answer is synthesized sentence by sentence. Microphone
 capture is muted while Voice-Pilot speaks so its voice cannot be recognized as
@@ -171,7 +171,7 @@ From the repository root:
 ```powershell
 .\.venv\Scripts\Activate.ps1
 python -m unittest discover -s tests -v
-Invoke-RestMethod http://127.0.0.1:8000/api/health
+Invoke-RestMethod http://127.0.0.1:8002/api/health
 ```
 
 Use the browser for the full microphone → STT → Muse Spark → MMS-TTS
@@ -180,7 +180,7 @@ interaction. To check local TTS and get a temporary WAV:
 ```powershell
 $wav = Join-Path $env:TEMP ("voice-pilot-test-" + [guid]::NewGuid() + ".wav")
 $body = @{ text = "Hello, this is Voice-Pilot speaking."; model = "mms" } | ConvertTo-Json
-Invoke-WebRequest -Uri http://127.0.0.1:8000/api/tts -Method Post `
+Invoke-WebRequest -Uri http://127.0.0.1:8002/api/tts -Method Post `
   -ContentType "application/json" -Body $body -OutFile $wav
 Write-Output "WAV written to $wav"
 ```
@@ -189,7 +189,7 @@ To check the Muse Spark text stream separately:
 
 ```powershell
 $body = '{"messages":[{"role":"user","content":"Reply with one friendly greeting."}]}'
-curl.exe -N http://127.0.0.1:8000/api/chat/stream `
+curl.exe -N http://127.0.0.1:8002/api/chat/stream `
   -H "Content-Type: application/json" -d $body
 ```
 
@@ -200,7 +200,7 @@ completes. This test exercises text streaming, not browser audio playback.
 
 ### Microphone does not start
 
-- Use Chrome/Edge at `http://127.0.0.1:8000` and allow microphone access.
+- Use Chrome/Edge at `http://127.0.0.1:8002` and allow microphone access.
 - Check that the selected port is serving the current project/backend. An
   older Uvicorn process may have a different `.env` loaded. Stop only that
   identified process, restart from the repository root, and refresh the page.
