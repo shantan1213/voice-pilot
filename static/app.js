@@ -227,7 +227,9 @@ async function ensureAudioContext() {
   audioEnabled = playbackContext.state === "running";
   audioDot.dataset.state = audioEnabled ? "ready" : "error";
   audioLabel.textContent = audioEnabled
-    ? "Voice replies on · MMS English"
+    ? voiceModel.value === "pocket-indian"
+      ? "Voice replies on · streaming Pocket voice"
+      : "Voice replies on · MMS WAV"
     : "Tap the microphone to enable voice replies";
   enableAudioButton.hidden = audioEnabled;
   if (!audioEnabled) {
