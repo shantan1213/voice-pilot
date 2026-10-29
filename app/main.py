@@ -332,6 +332,28 @@ def tts(request: TTSRequest) -> FileResponse:
         ) from exc
 
 
+@app.post("/api/tts/stream")
+def tts_stream(request: TTSRequest) -> StreamingResponse:
+    """Stream Pocket TTS as raw 24 kHz mono PCM16 audio."""
+    if request.model != "pocket-indian":
+        raise HTTPException(
+            status_code=400,
+            detail="Streaming speech is only available for the Pocket Indian-English voice.",
+        )
+
+    from app.tts import stream_pocket_pcm16
+
+    try:
+        audio_stream = stream_pocket_pcm16(request.text)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return StreamingResponse(
+        audio_stream,
+        media_type="audio/pcm;rate=24000;channels=1",
+        headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"},
+    )
+
+
 @app.websocket("/api/stt")
 async def stt(websocket: WebSocket) -> None:
     """Relay live 24 kHz PCM audio to Meta Muse Voice Transcribe."""

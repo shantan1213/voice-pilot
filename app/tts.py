@@ -248,3 +248,32 @@ def synthesize_to_wav(
                 pass
 
     return target
+
+
+def stream_pocket_pcm16(text: str):
+    """Yield Pocket TTS audio as little-endian 24 kHz PCM16 chunks."""
+    if not isinstance(text, str):
+        raise TypeError("text must be a string.")
+
+    text = text.strip()
+    if not text:
+        raise ValueError("text must not be empty.")
+    if len(text) > MAX_TEXT_LENGTH:
+        raise ValueError(f"text must be at most {MAX_TEXT_LENGTH} characters.")
+
+    import numpy as np
+
+    with _model_lock:
+        pocket_model, voice_state = _load_pocket_model()
+        for chunk in _pocket_chunks(text):
+            for generated in pocket_model.generate_audio_stream(
+                model_state=voice_state,
+                text_to_generate=chunk,
+            ):
+                if hasattr(generated, "detach"):
+                    generated = generated.detach().cpu().numpy()
+                samples = np.asarray(generated).reshape(-1)
+                if samples.size == 0:
+                    continue
+                pcm = np.clip(samples, -1.0, 1.0)
+                yield (pcm * 32767).astype("<i2", copy=False).tobytes()
