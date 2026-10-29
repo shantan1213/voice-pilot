@@ -53,6 +53,7 @@ recordings/
 *.part
 /logs/
 /conversation_logs/
+/runtime_logs/
 /runtime_data/
 
 # OS files.

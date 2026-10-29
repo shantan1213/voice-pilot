@@ -134,6 +134,22 @@ From the repository root:
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8002
 ```
 
+### One-command Windows startup
+
+After cloning, install or update `MODEL_API_KEY` in `.env`, then run:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\start.ps1
+```
+
+The script creates `.venv` if needed, installs the pinned dependencies, updates
+the configured chat model, runs the existing test suite, starts the backend on
+port 8002, waits for startup model initialization, and checks the health,
+homepage, and frontend bundle endpoints. It writes runtime logs to
+`runtime_logs/`, which are excluded from Git. Use `-SkipTests` only when a
+faster restart is required.
+
 Open [http://127.0.0.1:8002](http://127.0.0.1:8002), allow microphone access,
 and press the microphone button. The status shows Listening, Thinking, and
 Speaking while the answer is synthesized sentence by sentence. Microphone
