@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Voice-Pilot — Your Voice Assistant</title>
+  <meta name="theme-color" content="#f6f7fb" />
+  <link rel="stylesheet" href="/static/styles.css?v=9" />
+</head>
+<body>
+  <main>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Voice-Pilot home">
+        <span class="brand-mark" aria-hidden="true">V</span>
+        <span>Voice-Pilot</span>
+      </a>
+      <span class="connection"><span id="connection-dot"></span><span id="connection-label">Connecting</span></span>
+    </header>
+
+    <section class="voice-stage" aria-labelledby="app-name">
+      <div class="eyebrow">YOUR PERSONAL VOICE ASSISTANT</div>
+      <h1 id="app-name">Voice-Pilot</h1>
+      <p id="agent-status" role="status" aria-live="polite" data-state="idle">Ready when you are</p>
+
+      <div id="avatar" class="avatar" data-state="idle" role="img" aria-label="Voice-Pilot is idle">
+        <div class="avatar-halo"></div>
+        <svg class="face" viewBox="0 0 240 240" aria-hidden="true">
+          <defs>
+            <linearGradient id="faceGradient" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#f8fbff" />
+              <stop offset="1" stop-color="#dfeaff" />
+            </linearGradient>
+            <linearGradient id="cheekGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#a7c3ff" stop-opacity=".85" />
+              <stop offset="1" stop-color="#d7e5ff" stop-opacity=".2" />
+            </linearGradient>
+          </defs>
+          <path class="face-shape" d="M120 16c-48 0-84 34-84 88v27c0 52 35 91 84 91s84-39 84-91v-27c0-54-36-88-84-88Z" fill="url(#faceGradient)" />
+          <path class="face-shine" d="M61 79c11-28 33-43 59-43" fill="none" stroke="#fff" stroke-linecap="round" stroke-width="7" opacity=".8" />
+          <ellipse cx="70" cy="145" rx="20" ry="10" fill="url(#cheekGradient)" />
+          <ellipse cx="170" cy="145" rx="20" ry="10" fill="url(#cheekGradient)" />
+          <g class="eyes" fill="#243653">
+            <ellipse class="eye" cx="83" cy="115" rx="7" ry="10" />
+            <ellipse class="eye" cx="157" cy="115" rx="7" ry="10" />
+          </g>
+          <path class="mouth" d="M101 154c7 9 17 13 27 13s20-4 27-13" fill="none" stroke="#5978b4" stroke-linecap="round" stroke-width="5" />
+          <path d="M105 206c8 5 17 7 27 7s19-2 27-7" fill="none" stroke="#aac4f6" stroke-linecap="round" stroke-width="3" opacity=".8" />
+        </svg>
+        <div class="sound-rings" aria-hidden="true"><i></i><i></i><i></i></div>
+      </div>
+
+      <div class="controls">
+        <button id="microphone-button" class="mic-button" type="button" aria-pressed="false" aria-label="Start listening">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2.5" width="6" height="12" rx="3"></rect><path d="M5.5 11.5v1a6.5 6.5 0 0 0 13 0v-1M12 19v3M9 22h6"></path></svg>
+        </button>
+        <button id="stop-response" class="interrupt-button" type="button" disabled>Stop response</button>
+      </div>
+      <div class="audio-indicator"><span id="audio-dot"></span><span id="audio-label">Voice replies on · MMS English</span><button id="enable-audio" class="enable-audio" type="button" hidden>Enable voice</button></div>
+      <p id="error-message" class="error-message" role="alert" hidden></p>
+    </section>
+
+    <section class="conversation" aria-label="Conversation">
+      <div class="transcript-panel">
+        <div class="panel-heading"><span>YOU SAID</span><span id="transcript-state">LIVE TRANSCRIPT</span></div>
+        <p id="transcript" class="transcript">Your conversation will appear here.</p>
+      </div>
+      <div class="response-panel">
+        <div class="panel-heading"><span>VOICE-PILOT</span><span id="response-state">READY</span></div>
+        <p id="response" class="response">Ask me anything. I’m listening.</p>
+      </div>
+    </section>
+
+    <footer><span>Private by design</span><span>Speech recognition &amp; AI require an internet connection</span></footer>
+  </main>
+
+  <script src="/static/app.js?v=9"></script>
+</body>
+</html>

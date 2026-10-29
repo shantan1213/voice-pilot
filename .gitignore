@@ -1,0 +1,55 @@
+# Environment and secrets — never commit these.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials*.json
+token*.json
+service-account*.json
+secrets/
+secrets.json
+
+# Virtual environments.
+.venv/
+venv/
+ENV/
+env/
+
+# Python caches and tooling.
+__pycache__/
+*.py[cod]
+*.pyo
+.idea/
+.muse/
+.sl/
+.pip-tmp/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+dist/
+
+# Generated audio and media (TTS output, uploads, recordings).
+*.wav
+*.mp3
+*.ogg
+*.flac
+*.m4a
+*.webm
+audio/
+generated/
+uploads/
+recordings/
+
+# Logs and local runtime files.
+*.log
+*.pid
+
+# OS files.
+.DS_Store
+Thumbs.db
+desktop.ini
