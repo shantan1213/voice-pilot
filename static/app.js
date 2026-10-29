@@ -152,18 +152,18 @@ function stopCurrentAudio() {
       if (!(error instanceof DOMException && error.name === "InvalidStateError")) {
         throw error;
       }
-      for (const source of activeStreamingSources) {
-        try {
-          source.stop();
-        } catch (error) {
-          if (!(error instanceof DOMException && error.name === "InvalidStateError")) {
-            throw error;
-          }
-        }
-      }
-      activeStreamingSources.clear();
     }
   }
+  for (const source of activeStreamingSources) {
+    try {
+      source.stop();
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "InvalidStateError")) {
+        throw error;
+      }
+    }
+  }
+  activeStreamingSources.clear();
   speechQueue = Promise.resolve();
   audioDot.dataset.state = audioEnabled ? "ready" : "off";
 }
@@ -271,10 +271,10 @@ function finishSttTurn() {
   } else {
     closeSttSocket();
   }
+}
 
-  function hasPendingTurn() {
-    return responseInProgress || responseQueueRunning || responseQueue.length > 0;
-  }
+function hasPendingTurn() {
+  return responseInProgress || responseQueueRunning || responseQueue.length > 0;
 }
 
 async function playAudioBuffer(buffer, runId) {
