@@ -264,16 +264,6 @@ function closeSttSocket() {
   }
 }
 
-function finishSttTurn() {
-  sttCloseReason = "turn";
-  stopMicrophone();
-  if (sttSocket?.readyState === WebSocket.OPEN) {
-    sttSocket.send(JSON.stringify({ type: "stop" }));
-  } else {
-    closeSttSocket();
-  }
-}
-
 function hasPendingTurn() {
   return responseInProgress || responseQueueRunning || responseQueue.length > 0;
 }
@@ -672,13 +662,10 @@ async function processResponseQueue() {
         if (controller.signal.aborted) {
           setAgentState(microphoneActive ? "listening" : "idle", "Response interrupted");
         } else {
-          setAgentState("success", "Response complete");
-          window.clearTimeout(successTimer);
-          successTimer = window.setTimeout(() => {
-            if (!responseInProgress) {
-              setAgentState(microphoneActive ? "listening" : "idle", microphoneActive ? "Listening" : "Ready when you are");
-            }
-          }, 1600);
+          setAgentState(
+            microphoneActive ? "listening" : "idle",
+            microphoneActive ? "Listening" : "Ready when you are",
+          );
         }
       } catch (error) {
         if (controller.signal.aborted) {
@@ -868,7 +855,7 @@ async function startMicrophone() {
   silenceGain = captureContext.createGain();
   silenceGain.gain.value = 0;
   audioProcessor.onaudioprocess = (event) => {
-    if (responseInProgress || !sttSocket || sttSocket.readyState !== WebSocket.OPEN) {
+    if (!sttSocket || sttSocket.readyState !== WebSocket.OPEN) {
       return;
     }
     if (sttSocket.bufferedAmount > 512 * 1024) {
@@ -881,13 +868,14 @@ async function startMicrophone() {
     }
 
     const samples = event.inputBuffer.getChannelData(0);
-    if (firstAudioCapturedAt == null) {
+    const sendingSilence = responseInProgress || assistantSpeaking;
+    if (!sendingSilence && firstAudioCapturedAt == null) {
       firstAudioCapturedAt = performance.now();
     }
     const buffer = new ArrayBuffer(samples.length * 2);
     const view = new DataView(buffer);
     for (let index = 0; index < samples.length; index += 1) {
-      const sample = Math.max(-1, Math.min(1, samples[index]));
+      const sample = sendingSilence ? 0 : Math.max(-1, Math.min(1, samples[index]));
       view.setInt16(index * 2, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
     }
     sttSocket.send(buffer);
@@ -943,7 +931,6 @@ function handleSttEvent(event) {
       if (!assistantSpeaking && !responseInProgress
         && typeof event.transcript === "string" && event.transcript.trim()) {
         enqueueTurn(event.transcript);
-        finishSttTurn();
       }
       break;
     case "sessionComplete":
