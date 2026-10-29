@@ -48,6 +48,12 @@ recordings/
 # Logs and local runtime files.
 *.log
 *.pid
+*.tmp
+*.temp
+*.part
+/logs/
+/conversation_logs/
+/runtime_data/
 
 # OS files.
 .DS_Store

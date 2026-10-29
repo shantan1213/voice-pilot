@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Voice-Pilot — Your Voice Assistant</title>
-  <meta name="theme-color" content="#f6f7fb" />
-  <link rel="stylesheet" href="/static/styles.css?v=10" />
+  <meta name="theme-color" content="#f3f5ff" />
+  <link rel="stylesheet" href="/static/styles.css?v=11" />
 </head>
 <body>
   <main>
@@ -23,6 +23,8 @@
 
       <div id="avatar" class="avatar" data-state="idle" data-emotion="calm" role="img" aria-label="Voice-Pilot is idle">
         <div class="avatar-halo"></div>
+        <div class="avatar-orbit avatar-orbit-one" aria-hidden="true"></div>
+        <div class="avatar-orbit avatar-orbit-two" aria-hidden="true"></div>
         <svg class="face" viewBox="0 0 240 240" aria-hidden="true">
           <defs>
             <linearGradient id="faceGradient" x1="0" y1="0" x2="1" y2="1">
@@ -46,6 +48,8 @@
           <path class="mouth mouth-joyful" d="M100 151c8 12 18 17 28 17s20-5 28-17c-2 17-11 25-28 25s-26-8-28-25Z" fill="#5978b4" />
           <path class="mouth mouth-caring" d="M103 160c8-6 16-9 25-9s17 3 25 9" fill="none" stroke="#5978b4" stroke-linecap="round" stroke-width="5" />
           <path class="mouth mouth-curious" d="M108 159c5-3 10-4 15-4" fill="none" stroke="#5978b4" stroke-linecap="round" stroke-width="5" />
+          <path class="mouth mouth-success" d="M99 151c9 14 20 20 29 20s20-6 29-20c-2 19-12 29-29 29s-27-10-29-29Z" fill="#5978b4" />
+          <path class="mouth mouth-error" d="M103 165c8-7 16-10 25-10s17 3 25 10" fill="none" stroke="#d85d78" stroke-linecap="round" stroke-width="5" />
           <path d="M105 206c8 5 17 7 27 7s19-2 27-7" fill="none" stroke="#aac4f6" stroke-linecap="round" stroke-width="3" opacity=".8" />
         </svg>
         <div class="sound-rings" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -61,16 +65,22 @@
       <p id="error-message" class="error-message" role="alert" hidden></p>
     </section>
 
-    <section class="conversation" aria-label="Conversation">
-      <div class="transcript-panel">
-        <div class="panel-heading"><span>YOU SAID</span><span id="transcript-state">LIVE TRANSCRIPT</span></div>
-        <p id="transcript" class="transcript">Your conversation will appear here.</p>
+    <section class="conversation" aria-label="Conversation history">
+      <div class="conversation-heading">
+        <div>
+          <h2>Conversation</h2>
+          <p>Messages stay on this device.</p>
+        </div>
+        <button id="clear-history" class="clear-history" type="button">Clear history</button>
+      </div>
+      <div id="conversation-list" class="conversation-list" role="log" aria-live="polite" aria-relevant="additions text">
+        <p id="empty-history" class="empty-history">Your conversation will appear here.</p>
       </div>
     </section>
 
-    <footer><span>Private by design</span><span>Speech recognition &amp; AI require an internet connection</span></footer>
+    <footer><span>Private on this device</span><span>Speech recognition &amp; AI require an internet connection</span></footer>
   </main>
 
-  <script src="/static/app.js?v=10"></script>
+  <script src="/static/app.js?v=11"></script>
 </body>
 </html>

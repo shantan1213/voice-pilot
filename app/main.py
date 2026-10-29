@@ -7,18 +7,22 @@ import os
 import shutil
 import tempfile
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator, Literal
+from uuid import UUID
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 from websockets.asyncio.client import connect as websocket_connect
 from websockets.exceptions import ConnectionClosed
+
+from app.conversation_logs import ConversationLogWorker
 
 load_dotenv()
 
@@ -37,8 +41,20 @@ CHAT_MODEL = os.getenv("MUSE_CHAT_MODEL", "muse-spark-1.3").strip()
 CHAT_MAX_MESSAGES = 40
 CHAT_MAX_TOTAL_CHARACTERS = 24_000
 CHAT_TIMEOUT = httpx.Timeout(connect=10, read=90, write=20, pool=10)
+CONVERSATION_LOG_DIR = BASE_DIR / "conversation_logs"
+conversation_logs = ConversationLogWorker(CONVERSATION_LOG_DIR)
 
-app = FastAPI(title="Voice-Pilot", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    await conversation_logs.start()
+    try:
+        yield
+    finally:
+        await conversation_logs.stop()
+
+
+app = FastAPI(title="Voice-Pilot", version="1.0.0", lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
@@ -61,6 +77,15 @@ class ChatRequest(BaseModel):
     """Conversation context for one streamed Muse Spark response."""
 
     messages: list[ChatMessage] = Field(min_length=1, max_length=CHAT_MAX_MESSAGES)
+
+
+class ConversationTurnRequest(BaseModel):
+    """A completed, uniquely identified conversation turn to log."""
+
+    session_id: UUID
+    turn_id: UUID
+    user: str = Field(min_length=1, max_length=8_000)
+    assistant: str = Field(min_length=1, max_length=8_000)
 
 
 @app.get("/api/health")
@@ -239,6 +264,43 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.get("/api/history")
+async def get_conversation_history() -> dict[str, list[dict[str, str]]]:
+    """Return persisted completed turns for the local conversation view."""
+    return {"turns": await conversation_logs.list_turns()}
+
+
+@app.post("/api/history/turn", status_code=202)
+async def log_conversation_turn(request: ConversationTurnRequest) -> dict[str, str]:
+    """Enqueue one completed turn for background persistence."""
+    user = request.user.strip()
+    assistant = request.assistant.strip()
+    if not user or not assistant:
+        raise HTTPException(status_code=422, detail="A conversation turn cannot be empty.")
+    result = conversation_logs.enqueue(
+        request.session_id,
+        request.turn_id,
+        user,
+        assistant,
+    )
+    if result == "full":
+        raise HTTPException(status_code=503, detail="Conversation history is temporarily busy.")
+    return {"status": result}
+
+
+@app.delete("/api/history", status_code=204)
+async def clear_conversation_history() -> Response:
+    """Delete generated conversation logs after the browser confirms."""
+    try:
+        await conversation_logs.clear()
+    except OSError as exc:
+        logger.warning("Could not clear conversation history (%s).", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="Conversation history could not be cleared.") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="Conversation history is unavailable.") from exc
+    return Response(status_code=204)
 
 
 @app.post("/api/tts", response_class=FileResponse)

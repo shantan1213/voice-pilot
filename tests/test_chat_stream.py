@@ -4,11 +4,14 @@ import os
 import tempfile
 import unittest
 import wave
+from pathlib import Path
+from uuid import uuid4
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
 import app.main as main
+from app.conversation_logs import ConversationLogWorker
 
 
 def decode_sse_events(body: str) -> list[dict]:
@@ -203,6 +206,34 @@ class ExistingEndpointTests(unittest.TestCase):
         with TestClient(main.app) as client:
             response = client.get("/api/health")
         self.assertEqual(response.json(), {"status": "ok", "phase": 1, "app": "Voice-Pilot"})
+
+    def test_history_turn_is_queued_deduplicated_listed_and_cleared(self):
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            worker = ConversationLogWorker(Path(temporary_directory) / "conversation_logs")
+            session_id = str(uuid4())
+            turn_id = str(uuid4())
+            payload = {
+                "session_id": session_id,
+                "turn_id": turn_id,
+                "user": "Hello Voice-Pilot.",
+                "assistant": "Hello! How can I help?",
+            }
+            with patch.object(main, "conversation_logs", worker):
+                with TestClient(main.app) as client:
+                    first = client.post("/api/history/turn", json=payload)
+                    duplicate = client.post("/api/history/turn", json=payload)
+                    history = client.get("/api/history")
+                    cleared = client.delete("/api/history")
+                    empty_history = client.get("/api/history")
+
+        self.assertEqual(first.status_code, 202)
+        self.assertEqual(first.json(), {"status": "queued"})
+        self.assertEqual(duplicate.json(), {"status": "duplicate"})
+        self.assertEqual(len(history.json()["turns"]), 1)
+        self.assertEqual(history.json()["turns"][0]["user"], payload["user"])
+        self.assertEqual(history.json()["turns"][0]["assistant"], payload["assistant"])
+        self.assertEqual(cleared.status_code, 204)
+        self.assertEqual(empty_history.json(), {"turns": []})
 
     def test_tts_still_returns_a_playable_wav_response(self):
         def fake_synthesis(text, output_path, model_name="mms"):

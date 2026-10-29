@@ -8,12 +8,15 @@ const audioDot = document.getElementById("audio-dot");
 const audioLabel = document.getElementById("audio-label");
 const enableAudioButton = document.getElementById("enable-audio");
 const errorMessage = document.getElementById("error-message");
-const transcript = document.getElementById("transcript");
-const transcriptState = document.getElementById("transcript-state");
+const conversationList = document.getElementById("conversation-list");
+const emptyHistory = document.getElementById("empty-history");
+const clearHistoryButton = document.getElementById("clear-history");
 
 const STT_SAMPLE_RATE = 24000;
 const STT_SESSION_LIMIT_MS = 10 * 60 * 1000;
 const MAX_QUEUED_TURNS = 8;
+const sessionId = sessionStorage.getItem("voicePilotSessionId") || crypto.randomUUID();
+sessionStorage.setItem("voicePilotSessionId", sessionId);
 let sttSocket = null;
 let microphoneStream = null;
 let playbackContext = null;
@@ -23,7 +26,6 @@ let silenceGain = null;
 let sessionLimitTimer = null;
 let microphoneActive = false;
 let sttHadError = false;
-let finalTranscript = "";
 let generatedResponse = "";
 const chatHistory = [];
 let responseQueue = [];
@@ -35,16 +37,25 @@ let activeAudioSource = null;
 let activeTtsController = null;
 let responseInProgress = false;
 let audioEnabled = false;
+let sttReadyResolve = null;
+let sttReadyReject = null;
+let successTimer = null;
+let activeAssistantMessage = null;
+let historyTurns = [];
 
 function setAgentState(state, message) {
   avatar.dataset.state = state;
   avatar.setAttribute("aria-label", `Voice-Pilot is ${state}`);
   agentStatus.dataset.state = state;
   agentStatus.textContent = message;
-  connectionDot.dataset.state = state === "error" ? "error" : microphoneActive ? "connected" : "idle";
-  connectionLabel.textContent = microphoneActive
-    ? state === "error" ? "Connection issue" : "Listening connection"
-    : "Ready";
+  connectionDot.dataset.state = state === "error"
+    ? "error"
+    : microphoneActive || state === "connecting" ? "connected" : "idle";
+  connectionLabel.textContent = state === "connecting"
+    ? "Connecting"
+    : microphoneActive
+      ? state === "error" ? "Connection issue" : "Listening connection"
+      : state === "error" ? "Disconnected" : "Ready";
 }
 
 function showError(message) {
@@ -55,6 +66,102 @@ function showError(message) {
 function clearError() {
   errorMessage.textContent = "";
   errorMessage.hidden = true;
+}
+
+function addMessage(role, text, timestamp = new Date().toISOString(), pending = false) {
+  emptyHistory.hidden = true;
+  const message = document.createElement("article");
+  message.className = `message message-${role}${pending ? " message-pending" : ""}`;
+  const content = document.createElement("p");
+  content.className = "message-text";
+  content.textContent = text;
+  const time = document.createElement("time");
+  time.className = "message-time";
+  const date = new Date(timestamp);
+  time.dateTime = Number.isNaN(date.getTime()) ? "" : date.toISOString();
+  time.textContent = Number.isNaN(date.getTime())
+    ? ""
+    : date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  message.append(content, time);
+  conversationList.append(message);
+  conversationList.scrollTop = conversationList.scrollHeight;
+  return { message, content, time };
+}
+
+function renderStoredTurn(turn) {
+  addMessage("user", turn.user, turn.timestamp);
+  addMessage("assistant", turn.assistant, turn.timestamp);
+  chatHistory.push(
+    { role: "user", content: turn.user },
+    { role: "assistant", content: turn.assistant },
+  );
+}
+
+async function loadConversationHistory() {
+  try {
+    const result = await fetch("/api/history");
+    if (!result.ok) {
+      throw new Error(`Conversation history could not be loaded (HTTP ${result.status}).`);
+    }
+    const payload = await result.json();
+    if (!Array.isArray(payload.turns)) {
+      throw new Error("The conversation history response was invalid.");
+    }
+    historyTurns = payload.turns;
+    for (const turn of historyTurns) {
+      renderStoredTurn(turn);
+    }
+  } catch (error) {
+    showError(error instanceof Error ? error.message : "Conversation history could not be loaded.");
+  }
+}
+
+const historyReady = loadConversationHistory();
+
+clearHistoryButton.addEventListener("click", async () => {
+  if (!window.confirm("Clear all saved Voice-Pilot conversations from this device? This cannot be undone.")) {
+    return;
+  }
+  clearHistoryButton.disabled = true;
+  try {
+    const result = await fetch("/api/history", { method: "DELETE" });
+    if (!result.ok) {
+      throw new Error(`Conversation history could not be cleared (HTTP ${result.status}).`);
+    }
+    conversationList.replaceChildren(emptyHistory);
+    emptyHistory.hidden = false;
+    chatHistory.length = 0;
+    historyTurns = [];
+    clearError();
+  } catch (error) {
+    showError(error instanceof Error ? error.message : "Conversation history could not be cleared.");
+  } finally {
+    clearHistoryButton.disabled = false;
+  }
+});
+
+function persistTurnInBackground(turn, assistant) {
+  void fetch("/api/history/turn", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      session_id: sessionId,
+      turn_id: turn.turnId,
+      user: turn.question,
+      assistant,
+    }),
+  }).then(async (result) => {
+    if (!result.ok) {
+      const payload = await result.json().catch(() => ({}));
+      throw new Error(
+        typeof payload.detail === "string"
+          ? payload.detail
+          : `Conversation logging failed (HTTP ${result.status}).`,
+      );
+    }
+  }).catch((error) => {
+    showError(error instanceof Error ? error.message : "Conversation history could not be saved.");
+  });
 }
 
 function stopCurrentAudio() {
@@ -333,6 +440,11 @@ async function readMuseStream(streamResponse, runId) {
     if (event.type === "delta" && typeof event.text === "string" && event.text) {
       generatedText += event.text;
       generatedResponse = generatedText;
+      if (!activeAssistantMessage) {
+        activeAssistantMessage = addMessage("assistant", "", new Date().toISOString(), true);
+      }
+      activeAssistantMessage.content.textContent = generatedText;
+      conversationList.scrollTop = conversationList.scrollHeight;
       speechRemainder += event.text;
       setEmotion(generatedText);
       const { sentences, remainder } = extractSentences(cleanSpeechText(speechRemainder));
@@ -389,9 +501,8 @@ function enqueueTurn(text) {
     return;
   }
   clearError();
-  transcript.textContent = question;
-  transcriptState.textContent = "FINALIZED";
-  responseQueue.push(question);
+  addMessage("user", question);
+  responseQueue.push({ question, turnId: crypto.randomUUID() });
   void processResponseQueue();
 }
 
@@ -401,13 +512,16 @@ async function processResponseQueue() {
   }
   responseQueueRunning = true;
   try {
+    await historyReady;
     while (responseQueue.length) {
-      const question = responseQueue.shift();
+      const turn = responseQueue.shift();
+      const { question } = turn;
       const controller = new AbortController();
       const runId = speechRunId;
       activeResponseController = controller;
       responseInProgress = true;
       generatedResponse = "";
+      activeAssistantMessage = null;
       stopResponseButton.disabled = false;
       setAgentState("thinking", "Thinking");
 
@@ -445,17 +559,35 @@ async function processResponseQueue() {
         }
         const answer = await readMuseStream(result, runId);
         generatedResponse = answer;
+        if (activeAssistantMessage) {
+          activeAssistantMessage.message.classList.remove("message-pending");
+          activeAssistantMessage.time.dateTime = new Date().toISOString();
+          activeAssistantMessage.time.textContent = new Date().toLocaleTimeString([], {
+            hour: "numeric",
+            minute: "2-digit",
+          });
+        }
         chatHistory.push(
           { role: "user", content: question },
           { role: "assistant", content: answer },
         );
+        persistTurnInBackground(turn, answer);
         await speechQueue;
         if (controller.signal.aborted) {
           setAgentState(microphoneActive ? "listening" : "idle", "Response interrupted");
         } else {
-          setAgentState(microphoneActive ? "listening" : "idle", "Ready for your next question");
+          setAgentState("success", "Response complete");
+          window.clearTimeout(successTimer);
+          successTimer = window.setTimeout(() => {
+            if (!responseInProgress) {
+              setAgentState(microphoneActive ? "listening" : "idle", microphoneActive ? "Listening" : "Ready when you are");
+            }
+          }, 1600);
         }
       } catch (error) {
+        if (activeAssistantMessage) {
+          activeAssistantMessage.message.classList.remove("message-pending");
+        }
         if (controller.signal.aborted) {
           setAgentState(
             microphoneActive ? "listening" : "idle",
@@ -466,6 +598,7 @@ async function processResponseQueue() {
           setAgentState("error", "Something went wrong");
         }
       } finally {
+        activeAssistantMessage = null;
         if (activeResponseController === controller) {
           activeResponseController = null;
         }
@@ -513,17 +646,25 @@ async function startMicrophone() {
   microphoneButton.disabled = true;
   microphoneButton.dataset.busy = "true";
   setAgentState("connecting", "Connecting to speech recognition");
-  transcript.textContent = "Waiting for speech…";
-  transcriptState.textContent = "LIVE TRANSCRIPT";
-  finalTranscript = "";
   sttHadError = false;
 
   const websocketProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   sttSocket = new WebSocket(`${websocketProtocol}//${window.location.host}/api/stt`);
   sttSocket.binaryType = "arraybuffer";
+  sttReadyResolve = null;
+  sttReadyReject = null;
+  const readyPromise = new Promise((resolve, reject) => {
+    sttReadyResolve = resolve;
+    sttReadyReject = reject;
+  });
+  let readyTimeout;
 
   sttSocket.onopen = () => {
-    sttSocket.send(JSON.stringify({ type: "start" }));
+    try {
+      sttSocket.send(JSON.stringify({ type: "start" }));
+    } catch (error) {
+      sttReadyReject?.(error);
+    }
   };
   sttSocket.onmessage = (message) => {
     try {
@@ -532,9 +673,11 @@ async function startMicrophone() {
       sttHadError = true;
       showError(error instanceof Error ? error.message : "Received an invalid transcription response.");
       setAgentState("error", "Transcription error");
+      sttReadyReject?.(error);
     }
   };
   sttSocket.onerror = () => {
+    sttReadyReject?.(new Error("Speech connection failed. Check the backend, API key, and network connection."));
     if (!sttHadError) {
       sttHadError = true;
       showError("Speech connection failed. Check the backend, API key, and network connection.");
@@ -542,6 +685,9 @@ async function startMicrophone() {
     }
   };
   sttSocket.onclose = async () => {
+    sttReadyReject?.(new Error("The speech connection closed before recognition became ready."));
+    sttReadyResolve = null;
+    sttReadyReject = null;
     window.clearTimeout(sessionLimitTimer);
     microphoneActive = false;
     stopMicrophone();
@@ -559,6 +705,22 @@ async function startMicrophone() {
     sttSocket = null;
   };
 
+  try {
+    await Promise.race([
+      readyPromise,
+      new Promise((_, reject) => {
+        readyTimeout = window.setTimeout(
+          () => reject(new Error("Speech recognition did not become ready in time. Check the API connection and try again.")),
+          20_000,
+        );
+      }),
+    ]);
+  } finally {
+    window.clearTimeout(readyTimeout);
+    sttReadyResolve = null;
+    sttReadyReject = null;
+  }
+
   microphoneStream = await navigator.mediaDevices.getUserMedia({
     audio: {
       channelCount: 1,
@@ -569,7 +731,7 @@ async function startMicrophone() {
   });
   if (!sttSocket || sttSocket.readyState !== WebSocket.OPEN) {
     stopMicrophone();
-    throw new Error("The speech connection closed before the microphone was ready. Please try again.");
+    throw new Error("Speech recognition disconnected before microphone capture started. Please try again.");
   }
 
   if (!captureContext || captureContext.state === "closed") {
@@ -633,6 +795,9 @@ function handleSttEvent(event) {
       microphoneButton.disabled = false;
       microphoneButton.dataset.busy = "false";
       setAgentState("listening", "Listening");
+      sttReadyResolve?.();
+      sttReadyResolve = null;
+      sttReadyReject = null;
       break;
     case "speechStart":
       if (responseInProgress && avatar.dataset.state === "speaking") {
@@ -643,21 +808,19 @@ function handleSttEvent(event) {
       }
       break;
     case "speechEnd":
-      transcriptState.textContent = "PROCESSING";
+      if (!responseInProgress) {
+        setAgentState("thinking", "Thinking");
+      }
       break;
     case "transcript":
-      if (event.transcript) {
-        transcript.textContent = `${finalTranscript}${finalTranscript ? " " : ""}${event.transcript}`;
-        transcriptState.textContent = "LIVE TRANSCRIPT";
+      if (event.transcript && !responseInProgress) {
+        setAgentState("listening", "Listening");
       }
       break;
     case "speechComplete":
       if (typeof event.transcript === "string" && event.transcript.trim()) {
-        finalTranscript = `${finalTranscript}${finalTranscript ? "\n" : ""}${event.transcript.trim()}`;
-        transcript.textContent = finalTranscript;
         enqueueTurn(event.transcript);
       }
-      transcriptState.textContent = "FINALIZED";
       break;
     case "sessionComplete":
       if (!sttHadError && !responseInProgress) {
@@ -666,8 +829,12 @@ function handleSttEvent(event) {
       break;
     case "error":
       sttHadError = true;
-      showError(event.message || "Speech transcription failed.");
-      setAgentState("error", "Transcription error");
+      {
+        const message = event.message || "Speech transcription failed.";
+        showError(message);
+        setAgentState("error", "Transcription error");
+        sttReadyReject?.(new Error(message));
+      }
       break;
     default:
       break;
