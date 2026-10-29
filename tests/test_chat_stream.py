@@ -316,6 +316,9 @@ class ExistingEndpointTests(unittest.TestCase):
                 {"type": "sessionComplete"},
             ],
         )
+    def test_stt_can_open_three_consecutive_sessions(self):
+        for _ in range(3):
+            self.test_stt_websocket_relays_audio_and_final_transcript()
 
 
 if __name__ == "__main__":

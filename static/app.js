@@ -41,6 +41,12 @@ let sttReadyReject = null;
 let successTimer = null;
 let historyTurns = [];
 let assistantSpeaking = false;
+let listeningRequested = false;
+let sttCloseReason = null;
+let sttReconnectTimer = null;
+let sttReconnectAttempts = 0;
+let firstAudioCapturedAt = null;
+let activeTurnMetrics = null;
 
 function setAgentState(state, message) {
   avatar.dataset.state = state;
@@ -55,6 +61,17 @@ function setAgentState(state, message) {
     : microphoneActive
       ? state === "error" ? "Connection issue" : "Listening connection"
       : state === "error" ? "Disconnected" : "Ready";
+}
+
+function logTurnMetrics(metrics) {
+  const duration = (start, end) => start != null && end != null ? Math.round(end - start) : null;
+  console.info("Voice turn latency", {
+    firstAudioCapturedMs: duration(metrics.firstAudioCapturedAt, metrics.finalTranscriptAt),
+    transcriptToFirstTextMs: duration(metrics.finalTranscriptAt, metrics.firstTextChunkAt),
+    firstTextToTtsMs: duration(metrics.firstTextChunkAt, metrics.ttsStartedAt),
+    ttsToFirstAudioMs: duration(metrics.ttsStartedAt, metrics.firstAudioPlayableAt),
+    playbackMs: duration(metrics.firstAudioPlayableAt, metrics.playbackCompletedAt),
+  });
 }
 
 function showError(message) {
@@ -244,6 +261,16 @@ function closeSttSocket() {
   }
 }
 
+function finishSttTurn() {
+  sttCloseReason = "turn";
+  stopMicrophone();
+  if (sttSocket?.readyState === WebSocket.OPEN) {
+    sttSocket.send(JSON.stringify({ type: "stop" }));
+  } else {
+    closeSttSocket();
+  }
+}
+
 async function playAudioBuffer(buffer, runId) {
   if (!playbackContext || runId !== speechRunId) {
     return Promise.resolve();
@@ -265,6 +292,9 @@ async function playAudioBuffer(buffer, runId) {
   source.connect(gain);
   gain.connect(playbackContext.destination);
   activeAudioSource = source;
+  if (activeTurnMetrics && activeTurnMetrics.firstAudioPlayableAt == null) {
+    activeTurnMetrics.firstAudioPlayableAt = performance.now();
+  }
   assistantSpeaking = true;
   avatar.dataset.state = "speaking";
   agentStatus.textContent = "Speaking";
@@ -336,6 +366,9 @@ async function streamPocketAudio(text, runId, controller) {
       activeStreamingSources.add(source);
       if (!receivedAudio) {
         receivedAudio = true;
+        if (activeTurnMetrics && activeTurnMetrics.firstAudioPlayableAt == null) {
+          activeTurnMetrics.firstAudioPlayableAt = performance.now();
+        }
         assistantSpeaking = true;
         avatar.dataset.state = "speaking";
         agentStatus.textContent = "Speaking";
@@ -375,6 +408,9 @@ function queueSpeech(sentence, runId) {
       }
       const controller = new AbortController();
       activeTtsController = controller;
+      if (activeTurnMetrics && activeTurnMetrics.ttsStartedAt == null) {
+        activeTurnMetrics.ttsStartedAt = performance.now();
+      }
       audioDot.dataset.state = "loading";
       agentStatus.textContent = "Preparing voice";
 
@@ -489,6 +525,9 @@ async function readMuseStream(streamResponse, runId) {
     }
     if (event.type === "delta" && typeof event.text === "string" && event.text) {
       generatedText += event.text;
+      if (activeTurnMetrics && activeTurnMetrics.firstTextChunkAt == null) {
+        activeTurnMetrics.firstTextChunkAt = performance.now();
+      }
       generatedResponse = generatedText;
       speechRemainder += event.text;
       setEmotion(generatedText);
@@ -546,7 +585,19 @@ function enqueueTurn(text) {
     return;
   }
   clearError();
-  responseQueue.push({ question, turnId: crypto.randomUUID() });
+  responseQueue.push({
+    question,
+    turnId: crypto.randomUUID(),
+    metrics: {
+      firstAudioCapturedAt,
+      finalTranscriptAt: performance.now(),
+      firstTextChunkAt: null,
+      ttsStartedAt: null,
+      firstAudioPlayableAt: null,
+      playbackCompletedAt: null,
+    },
+  });
+  firstAudioCapturedAt = null;
   void processResponseQueue();
 }
 
@@ -559,11 +610,12 @@ async function processResponseQueue() {
     await historyReady;
     while (responseQueue.length) {
       const turn = responseQueue.shift();
-      const { question } = turn;
+      const { question, metrics } = turn;
       const controller = new AbortController();
       const runId = speechRunId;
       activeResponseController = controller;
       responseInProgress = true;
+      activeTurnMetrics = metrics;
       generatedResponse = "";
       stopResponseButton.disabled = false;
       setAgentState("thinking", "Thinking");
@@ -608,6 +660,8 @@ async function processResponseQueue() {
         );
         persistTurnInBackground(turn, answer);
         await speechQueue;
+        metrics.playbackCompletedAt = performance.now();
+        logTurnMetrics(metrics);
         if (controller.signal.aborted) {
           setAgentState(microphoneActive ? "listening" : "idle", "Response interrupted");
         } else {
@@ -634,11 +688,20 @@ async function processResponseQueue() {
           activeResponseController = null;
         }
         responseInProgress = false;
+        activeTurnMetrics = null;
         stopResponseButton.disabled = true;
       }
     }
   } finally {
     responseQueueRunning = false;
+    if (listeningRequested && !microphoneActive && !sttSocket && !responseInProgress) {
+      window.clearTimeout(sttReconnectTimer);
+      sttReconnectTimer = window.setTimeout(() => {
+        if (listeningRequested && !microphoneActive && !responseInProgress) {
+          void startMicrophone();
+        }
+      }, 0);
+    }
   }
 }
 
@@ -678,6 +741,8 @@ async function startMicrophone() {
   microphoneButton.dataset.busy = "true";
   setAgentState("connecting", "Connecting to speech recognition");
   sttHadError = false;
+  sttCloseReason = null;
+  firstAudioCapturedAt = null;
 
   const websocketProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   sttSocket = new WebSocket(`${websocketProtocol}//${window.location.host}/api/stt`);
@@ -728,10 +793,24 @@ async function startMicrophone() {
     microphoneButton.setAttribute("aria-pressed", "false");
     microphoneButton.setAttribute("aria-label", "Start listening");
     microphoneButton.title = "Start listening";
-    if (sttHadError && !errorMessage.hidden) {
+    if (sttCloseReason === "turn") {
+      setAgentState(responseInProgress ? "thinking" : "idle", responseInProgress ? "Thinking" : "Ready when you are");
+    } else if (sttHadError && !errorMessage.hidden) {
       setAgentState("error", "Speech connection error");
     } else if (!responseInProgress) {
       setAgentState("idle", "Ready when you are");
+    }
+    if (sttHadError && sttCloseReason !== "turn" && listeningRequested && !responseInProgress
+      && sttReconnectAttempts < 3) {
+      const delay = 500 * (2 ** sttReconnectAttempts);
+      sttReconnectAttempts += 1;
+      setAgentState("connecting", `Reconnecting to speech recognition (${sttReconnectAttempts}/3)`);
+      window.clearTimeout(sttReconnectTimer);
+      sttReconnectTimer = window.setTimeout(() => {
+        if (listeningRequested && !microphoneActive && !responseInProgress) {
+          void startMicrophone();
+        }
+      }, delay);
     }
     sttSocket = null;
   };
@@ -791,6 +870,9 @@ async function startMicrophone() {
     }
 
     const samples = event.inputBuffer.getChannelData(0);
+    if (firstAudioCapturedAt == null) {
+      firstAudioCapturedAt = performance.now();
+    }
     const buffer = new ArrayBuffer(samples.length * 2);
     const view = new DataView(buffer);
     for (let index = 0; index < samples.length; index += 1) {
@@ -823,6 +905,7 @@ function handleSttEvent(event) {
   }
   switch (event.type) {
     case "ready":
+      sttReconnectAttempts = 0;
       microphoneButton.disabled = false;
       microphoneButton.dataset.busy = "false";
       setAgentState("listening", "Listening");
@@ -848,6 +931,7 @@ function handleSttEvent(event) {
     case "speechComplete":
       if (!assistantSpeaking && !responseInProgress
         && typeof event.transcript === "string" && event.transcript.trim()) {
+        finishSttTurn();
         enqueueTurn(event.transcript);
       }
       break;
@@ -872,6 +956,7 @@ function handleSttEvent(event) {
 
 microphoneButton.addEventListener("click", async () => {
   if (microphoneActive) {
+    listeningRequested = false;
     microphoneButton.disabled = true;
     microphoneButton.classList.remove("active");
     setAgentState("thinking", "Finishing your last words");
@@ -883,9 +968,16 @@ microphoneButton.addEventListener("click", async () => {
     return;
   }
 
+  listeningRequested = true;
+  if (responseInProgress) {
+    setAgentState("thinking", "Finishing response");
+    return;
+  }
+
   try {
     await startMicrophone();
   } catch (error) {
+    listeningRequested = false;
     sttHadError = true;
     showError(error instanceof Error ? error.message : "Could not start microphone.");
     stopMicrophone();

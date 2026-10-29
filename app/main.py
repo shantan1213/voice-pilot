@@ -475,9 +475,23 @@ async def stt(websocket: WebSocket) -> None:
                             )
                             continue
                         await websocket.send_json(event)
-                except ConnectionClosed:
+                except ConnectionClosed as exc:
                     if not end_stream_sent.is_set():
-                        raise
+                        logger.warning(
+                            "Muse ASR closed unexpectedly (session %s, code %s, reason %s).",
+                            session_id,
+                            exc.code,
+                            exc.reason or "none",
+                        )
+                        await websocket.send_json(
+                            {
+                                "type": "error",
+                                "message": (
+                                    "Speech service connection closed unexpectedly "
+                                    f"(code {exc.code})."
+                                ),
+                            }
+                        )
                     logger.debug("Muse ASR closed after endStream (session %s).", session_id)
 
                 await websocket.send_json({"type": "sessionComplete"})
