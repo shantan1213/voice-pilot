@@ -50,6 +50,12 @@ async def lifespan(_app: FastAPI):
     await conversation_logs.start()
     await conversation_logs.clear()
     try:
+        from app.tts import warm_mms_model
+
+        await asyncio.to_thread(warm_mms_model)
+    except Exception:
+        logger.exception("MMS-TTS warm-up failed; it will retry on the first voice response.")
+    try:
         yield
     finally:
         await conversation_logs.stop()
@@ -117,9 +123,10 @@ def _upstream_error_message(response: httpx.Response) -> str:
 
 async def _stream_muse_chat(messages: list[dict[str, str]], api_key: str) -> AsyncIterator[str]:
     """Stream text deltas from Meta's OpenAI-compatible Chat Completions API."""
+    auth_header = "Bearer " + api_key if not api_key.lower().startswith("bearer ") else api_key
     headers = {
-        "Authorization": api_key if api_key.lower().startswith("bearer ") else f"Bearer {api_key}",
         "Accept": "text/event-stream",
+        "Authorization": auth_header,
     }
     payload = {
         "model": CHAT_MODEL,
@@ -127,108 +134,129 @@ async def _stream_muse_chat(messages: list[dict[str, str]], api_key: str) -> Asy
         "stream": True,
         "max_completion_tokens": 1024,
     }
-    has_text = False
-    stream_finished = False
+    for attempt in range(2):
+        has_text = False
+        stream_finished = False
+        empty_choices = 0
 
-    try:
-        async with httpx.AsyncClient(timeout=CHAT_TIMEOUT) as client:
-            async with client.stream(
-                "POST",
-                CHAT_COMPLETIONS_URL,
-                headers=headers,
-                json=payload,
-            ) as response:
-                if response.status_code < 200 or response.status_code >= 300:
-                    await response.aread()
-                    yield _sse_event(
-                        {"type": "error", "message": _upstream_error_message(response)}
-                    )
-                    return
-
-                data_lines: list[str] = []
-                async for line in response.aiter_lines():
-                    if line and not data_lines and line.startswith(":"):
-                        continue
-                    if line.startswith("data:"):
-                        data_lines.append(line[5:].lstrip())
-                        continue
-                    if line != "" or not data_lines:
-                        continue
-
-                    raw_data = "\n".join(data_lines)
-                    data_lines.clear()
-                    if raw_data == "[DONE]":
-                        stream_finished = True
-                        break
-                    try:
-                        chunk = json.loads(raw_data)
-                    except json.JSONDecodeError:
-                        logger.warning("Muse Spark sent a malformed streaming event.")
-                        continue
-                    if not isinstance(chunk, dict):
-                        continue
-                    if isinstance(chunk.get("error"), dict):
-                        message = chunk["error"].get("message")
+        try:
+            async with httpx.AsyncClient(timeout=CHAT_TIMEOUT) as client:
+                async with client.stream(
+                    "POST",
+                    CHAT_COMPLETIONS_URL,
+                    headers=headers,
+                    json=payload,
+                ) as response:
+                    if response.status_code < 200 or response.status_code >= 300:
+                        await response.aread()
                         yield _sse_event(
-                            {
-                                "type": "error",
-                                "message": message if isinstance(message, str) else "Muse Spark returned an error.",
-                            }
+                            {"type": "error", "message": _upstream_error_message(response)}
                         )
                         return
 
-                    choices = chunk.get("choices")
-                    if not isinstance(choices, list) or not choices:
-                        continue
-                    choice = choices[0]
-                    if not isinstance(choice, dict):
-                        continue
-                    delta = choice.get("delta")
-                    content = delta.get("content") if isinstance(delta, dict) else None
-                    if isinstance(content, str) and content:
-                        has_text = True
-                        yield _sse_event({"type": "delta", "text": content})
-                    if choice.get("finish_reason") is not None:
-                        stream_finished = True
-
-                if data_lines and not stream_finished:
-                    raw_data = "\n".join(data_lines)
-                    if raw_data == "[DONE]":
-                        stream_finished = True
-                    else:
+                    async def process_event(raw_data: str) -> AsyncIterator[str]:
+                        nonlocal has_text, stream_finished, empty_choices
+                        if raw_data == "[DONE]":
+                            stream_finished = True
+                            return
                         try:
                             chunk = json.loads(raw_data)
                         except json.JSONDecodeError:
-                            chunk = {}
-                        choices = chunk.get("choices") if isinstance(chunk, dict) else None
-                        if isinstance(choices, list) and choices and isinstance(choices[0], dict):
-                            choice = choices[0]
-                            delta = choice.get("delta")
-                            content = delta.get("content") if isinstance(delta, dict) else None
-                            if isinstance(content, str) and content:
-                                has_text = True
-                                yield _sse_event({"type": "delta", "text": content})
-                            if choice.get("finish_reason") is not None:
-                                stream_finished = True
+                            logger.warning("Muse Spark sent a malformed streaming event.")
+                            return
+                        if not isinstance(chunk, dict):
+                            return
+                        if isinstance(chunk.get("error"), dict):
+                            message = chunk["error"].get("message")
+                            yield _sse_event(
+                                {
+                                    "type": "error",
+                                    "message": message if isinstance(message, str) else "Muse Spark returned an error.",
+                                }
+                            )
+                            return
 
-        if not has_text:
-            yield _sse_event({"type": "error", "message": "Muse Spark returned an empty response."})
-        elif not stream_finished:
-            yield _sse_event(
-                {"type": "error", "message": "The response stream ended before Muse Spark finished."}
+                        choices = chunk.get("choices")
+                        if not isinstance(choices, list) or not choices:
+                            empty_choices += 1
+                            return
+                        choice = choices[0]
+                        if not isinstance(choice, dict):
+                            empty_choices += 1
+                            return
+                        delta = choice.get("delta")
+                        content = delta.get("content") if isinstance(delta, dict) else None
+                        if not isinstance(content, str) or not content:
+                            message = choice.get("message")
+                            if isinstance(message, dict):
+                                content = message.get("content")
+                        if not isinstance(content, str) or not content:
+                            content = choice.get("text")
+                        if isinstance(content, str) and content:
+                            has_text = True
+                            yield _sse_event({"type": "delta", "text": content})
+                        if choice.get("finish_reason") is not None:
+                            stream_finished = True
+
+                    data_lines: list[str] = []
+                    async for line in response.aiter_lines():
+                        if line and not data_lines and line.startswith(":"):
+                            continue
+                        if line.startswith("data:"):
+                            data_lines.append(line[5:].lstrip())
+                            continue
+                        if line != "" or not data_lines:
+                            continue
+
+                        raw_data = "\n".join(data_lines)
+                        data_lines.clear()
+                        async for event in process_event(raw_data):
+                            yield event
+                        if stream_finished:
+                            break
+
+                    if data_lines and not stream_finished:
+                        async for event in process_event("\n".join(data_lines)):
+                            yield event
+
+            if has_text and stream_finished:
+                yield _sse_event({"type": "done"})
+                return
+            if has_text:
+                yield _sse_event(
+                    {"type": "error", "message": "The response stream ended before Muse Spark finished."}
+                )
+                return
+            if attempt == 0:
+                logger.warning(
+                    "Muse Spark returned an empty successful stream; retrying once (%d empty events).",
+                    empty_choices,
+                )
+                continue
+            logger.error(
+                "Muse Spark returned an empty successful stream after retry (%d empty events).",
+                empty_choices,
             )
-        else:
-            yield _sse_event({"type": "done"})
-    except asyncio.CancelledError:
-        raise
-    except httpx.TimeoutException:
-        yield _sse_event({"type": "error", "message": "Muse Spark timed out before finishing the response."})
-    except httpx.RequestError as exc:
-        logger.warning("Muse Spark request failed (%s).", type(exc).__name__)
-        yield _sse_event({"type": "error", "message": "Could not reach Muse Spark."})
-    except Exception as exc:
-        logger.exception("Muse Spark stream failed (%s).", type(exc).__name__)
-        yield _sse_event({"type": "error", "message": "Muse Spark could not complete the response."})
+            yield _sse_event(
+                {
+                    "type": "error",
+                    "message": "Muse Spark returned no text. The provider may be temporarily unavailable.",
+                }
+            )
+            return
+        except asyncio.CancelledError:
+            raise
+        except httpx.TimeoutException:
+            yield _sse_event({"type": "error", "message": "Muse Spark timed out before finishing the response."})
+            return
+        except httpx.RequestError as exc:
+            logger.warning("Muse Spark request failed (%s).", type(exc).__name__)
+            yield _sse_event({"type": "error", "message": "Could not reach Muse Spark."})
+            return
+        except Exception as exc:
+            logger.exception("Muse Spark stream failed (%s).", type(exc).__name__)
+            yield _sse_event({"type": "error", "message": "Muse Spark could not complete the response."})
+            return
 
 
 @app.post("/api/chat/stream")

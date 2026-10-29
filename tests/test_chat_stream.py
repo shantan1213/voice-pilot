@@ -65,6 +65,20 @@ class FakeClient:
         return self.response
 
 
+class SequenceClient:
+    def __init__(self, responses: list[FakeResponse]):
+        self.responses = iter(responses)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_args):
+        return None
+
+    def stream(self, *_args, **_kwargs):
+        return next(self.responses)
+
+
 class ChatStreamTests(unittest.IsolatedAsyncioTestCase):
     async def test_streams_text_and_ignores_empty_choices_and_missing_deltas(self):
         response = FakeResponse(
@@ -102,19 +116,80 @@ class ChatStreamTests(unittest.IsolatedAsyncioTestCase):
         args, kwargs = client.request_args
         self.assertEqual(args, ("POST", main.CHAT_COMPLETIONS_URL))
         self.assertEqual(kwargs["headers"]["Authorization"], "Bearer secret-test-key")
+        self.assertTrue(kwargs["headers"]["Authorization"].startswith("Bearer "))
         self.assertTrue(kwargs["json"]["stream"])
         self.assertEqual(kwargs["json"]["model"], main.CHAT_MODEL)
         self.assertTrue(response.closed)
 
     async def test_reports_empty_model_response(self):
         response = FakeResponse(['data: {"choices":[]}', "", "data: [DONE]", ""])
+        retry_response = FakeResponse(['data: {"choices":[]}', "", "data: [DONE]", ""])
+        client = SequenceClient([response, retry_response])
+        with patch.object(main.httpx, "AsyncClient", return_value=client):
+            events = [
+                json.loads(event.removeprefix("data: ").strip())
+                async for event in main._stream_muse_chat([], "secret-test-key")
+            ]
+        self.assertEqual(
+            events,
+            [{
+                "type": "error",
+                "message": "Muse Spark returned no text. The provider may be temporarily unavailable.",
+            }],
+        )
+
+    async def test_retries_empty_successful_stream_once(self):
+        first = FakeResponse(['data: {"choices":[]}', "", "data: [DONE]", ""])
+        second = FakeResponse(
+            [
+                'data: {"choices":[{"message":{"content":"Recovered"}}]}',
+                "",
+                "data: [DONE]",
+                "",
+            ]
+        )
+        client = SequenceClient([first, second])
+        with patch.object(main.httpx, "AsyncClient", return_value=client):
+            events = [
+                json.loads(event.removeprefix("data: ").strip())
+                async for event in main._stream_muse_chat([], "secret-test-key")
+            ]
+        self.assertEqual(events, [{"type": "delta", "text": "Recovered"}, {"type": "done"}])
+
+    async def test_accepts_legacy_text_delta_shape(self):
+        response = FakeResponse(
+            [
+                'data: {"choices":[{"text":"Legacy reply","finish_reason":"stop"}]}',
+                "",
+                "data: [DONE]",
+                "",
+            ]
+        )
         client = FakeClient(response)
         with patch.object(main.httpx, "AsyncClient", return_value=client):
             events = [
                 json.loads(event.removeprefix("data: ").strip())
                 async for event in main._stream_muse_chat([], "secret-test-key")
             ]
-        self.assertEqual(events, [{"type": "error", "message": "Muse Spark returned an empty response."}])
+        self.assertEqual(events, [{"type": "delta", "text": "Legacy reply"}, {"type": "done"}])
+
+    async def test_reports_truncated_stream_after_text(self):
+        response = FakeResponse(
+            ['data: {"choices":[{"delta":{"content":"Partial"}}]}', ""]
+        )
+        client = FakeClient(response)
+        with patch.object(main.httpx, "AsyncClient", return_value=client):
+            events = [
+                json.loads(event.removeprefix("data: ").strip())
+                async for event in main._stream_muse_chat([], "secret-test-key")
+            ]
+        self.assertEqual(
+            events,
+            [
+                {"type": "delta", "text": "Partial"},
+                {"type": "error", "message": "The response stream ended before Muse Spark finished."},
+            ],
+        )
 
     async def test_surfaces_provider_http_errors(self):
         response = FakeResponse([], status_code=401, error_body={"error": {"message": "Invalid API key"}})

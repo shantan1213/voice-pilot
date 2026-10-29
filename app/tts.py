@@ -27,6 +27,11 @@ _pocket_voice_state = None
 _model_lock = threading.RLock()
 
 
+def warm_mms_model() -> None:
+    """Load MMS once during startup so the first spoken response is not cold."""
+    _load_model()
+
+
 def _load_model():
     """Load the tokenizer and VITS model lazily on the first synthesis request."""
     global _model, _tokenizer, _device
