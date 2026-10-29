@@ -20,15 +20,15 @@ flowchart TD
     WS -->|Finalized user text| JS[Browser JavaScript]
     JS -->|Question and recent context| CHAT[FastAPI /api/chat/stream]
     CHAT <-->|OpenAI-compatible streaming API| SPARK[Meta Muse Spark]
-    CHAT -->|SSE text deltas| BUBBLES[Conversation chat bubbles]
-    BUBBLES --> SENTENCES[Complete sentence queue]
+    CHAT -->|SSE text deltas| UI[Browser voice state]
+    UI --> SENTENCES[Complete sentence queue]
     SENTENCES --> TTS[FastAPI /api/tts]
     TTS --> MMS[Local facebook/mms-tts-eng]
     MMS -->|WAV| AUDIO[Browser Web Audio playback]
     JS -->|Completed turn, no await on disk| Q[Bounded asyncio queue]
     Q --> W[Background log worker]
     W --> FILE[conversation_logs/session-*.txt]
-    FILE -->|History API| BUBBLES
+    FILE -->|History API| UI
 ```
 
 ```mermaid
@@ -79,9 +79,11 @@ sequenceDiagram
    chat bubble and enters the response queue.
 5. FastAPI sends the question and recent context to Muse Spark. Model deltas
    arrive as SSE; JavaScript incrementally updates an assistant chat bubble.
-6. Completed sentences enter a serial TTS queue. The browser calls
-   `/api/tts`; local MMS inference returns WAV audio. Web Audio decodes and
-   plays one clip at a time, keeping text streaming independent of synthesis.
+6. Completed sentences enter a serial TTS queue. The browser stops sending
+   microphone frames while a response is in progress, then calls `/api/tts`;
+   local MMS inference returns WAV audio. Web Audio decodes and plays one clip
+   at a time, keeping text streaming independent of synthesis and preventing
+   assistant audio from becoming the next user turn.
 7. After a complete model response, the browser sends a turn ID, session ID,
    finalized user text, and assistant text to the local history endpoint. The
    backend queues the record and immediately returns; a worker writes it to
@@ -102,11 +104,10 @@ exposes:
 | `POST /api/history/turn` | Enqueues one idempotent turn for persistence |
 | `DELETE /api/history` | Clears saved session text files |
 
-`static/index.html` contains the responsive voice UI, animated SVG face, and
-conversation container. `static/styles.css` defines gradients, chat bubbles,
-state animations, and reduced-motion behavior. `static/app.js` handles the
-microphone, STT connection state, SSE parsing, response/TTS queues, playback,
-history display, and clear confirmation.
+`static/index.html` contains the responsive voice UI and animated SVG face.
+`static/styles.css` defines gradients, state animations, and reduced-motion
+behavior. `static/app.js` handles the microphone, STT connection state, SSE
+parsing, response/TTS queues, playback, and background history persistence.
 
 ## 5. Streaming speech recognition
 

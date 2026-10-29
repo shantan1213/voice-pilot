@@ -25,8 +25,7 @@ hear each completed sentence spoken by a locally hosted MMS-TTS model.
 - Local `facebook/mms-tts-eng` speech synthesis with sequential WAV playback.
 - A colorful, animated SVG face with idle, listening, thinking, speaking,
   success, and error states.
-- A compact conversation view with chat bubbles and a confirmed Clear History
-  action.
+- A focused voice interface without an on-screen chat transcript.
 - Completed turns saved as readable text files by a background writer, without
   waiting on disk I/O in the STT, chat, or TTS path.
 - Unique session files and turn IDs prevent duplicate log entries.
@@ -137,10 +136,10 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 Open [http://127.0.0.1:8000](http://127.0.0.1:8000), allow microphone access,
 and press the microphone button. The status shows Listening, Thinking, and
-Speaking; finalized turns appear in the chat bubbles while the answer text
-streams and is synthesized sentence by sentence. Press **Stop response** or
-speak to interrupt playback. Press the microphone again to end listening and
-finalize the last utterance.
+Speaking while the answer is synthesized sentence by sentence. Microphone
+capture is muted while Voice-Pilot speaks so its voice cannot be recognized as
+your next request. Press **Stop response** to stop playback, then speak again.
+Press the microphone again to end listening and finalize the last utterance.
 
 The app now waits for Meta's STT `ready` event before it asks the browser to
 start microphone capture. If the backend lacks a key or the upstream service

@@ -8,9 +8,6 @@ const audioDot = document.getElementById("audio-dot");
 const audioLabel = document.getElementById("audio-label");
 const enableAudioButton = document.getElementById("enable-audio");
 const errorMessage = document.getElementById("error-message");
-const conversationList = document.getElementById("conversation-list");
-const emptyHistory = document.getElementById("empty-history");
-const clearHistoryButton = document.getElementById("clear-history");
 
 const STT_SAMPLE_RATE = 24000;
 const STT_SESSION_LIMIT_MS = 10 * 60 * 1000;
@@ -40,8 +37,8 @@ let audioEnabled = false;
 let sttReadyResolve = null;
 let sttReadyReject = null;
 let successTimer = null;
-let activeAssistantMessage = null;
 let historyTurns = [];
+let assistantSpeaking = false;
 
 function setAgentState(state, message) {
   avatar.dataset.state = state;
@@ -68,29 +65,7 @@ function clearError() {
   errorMessage.hidden = true;
 }
 
-function addMessage(role, text, timestamp = new Date().toISOString(), pending = false) {
-  emptyHistory.hidden = true;
-  const message = document.createElement("article");
-  message.className = `message message-${role}${pending ? " message-pending" : ""}`;
-  const content = document.createElement("p");
-  content.className = "message-text";
-  content.textContent = text;
-  const time = document.createElement("time");
-  time.className = "message-time";
-  const date = new Date(timestamp);
-  time.dateTime = Number.isNaN(date.getTime()) ? "" : date.toISOString();
-  time.textContent = Number.isNaN(date.getTime())
-    ? ""
-    : date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  message.append(content, time);
-  conversationList.append(message);
-  conversationList.scrollTop = conversationList.scrollHeight;
-  return { message, content, time };
-}
-
 function renderStoredTurn(turn) {
-  addMessage("user", turn.user, turn.timestamp);
-  addMessage("assistant", turn.assistant, turn.timestamp);
   chatHistory.push(
     { role: "user", content: turn.user },
     { role: "assistant", content: turn.assistant },
@@ -117,28 +92,6 @@ async function loadConversationHistory() {
 }
 
 const historyReady = loadConversationHistory();
-
-clearHistoryButton.addEventListener("click", async () => {
-  if (!window.confirm("Clear all saved Voice-Pilot conversations from this device? This cannot be undone.")) {
-    return;
-  }
-  clearHistoryButton.disabled = true;
-  try {
-    const result = await fetch("/api/history", { method: "DELETE" });
-    if (!result.ok) {
-      throw new Error(`Conversation history could not be cleared (HTTP ${result.status}).`);
-    }
-    conversationList.replaceChildren(emptyHistory);
-    emptyHistory.hidden = false;
-    chatHistory.length = 0;
-    historyTurns = [];
-    clearError();
-  } catch (error) {
-    showError(error instanceof Error ? error.message : "Conversation history could not be cleared.");
-  } finally {
-    clearHistoryButton.disabled = false;
-  }
-});
 
 function persistTurnInBackground(turn, assistant) {
   void fetch("/api/history/turn", {
@@ -293,6 +246,7 @@ async function playAudioBuffer(buffer, runId) {
   source.connect(gain);
   gain.connect(playbackContext.destination);
   activeAudioSource = source;
+  assistantSpeaking = true;
   avatar.dataset.state = "speaking";
   agentStatus.textContent = "Speaking";
   audioDot.dataset.state = "speaking";
@@ -302,6 +256,7 @@ async function playAudioBuffer(buffer, runId) {
       if (activeAudioSource === source) {
         activeAudioSource = null;
       }
+      assistantSpeaking = false;
       if (runId === speechRunId && responseInProgress) {
         setAgentState("thinking", "Thinking");
         audioDot.dataset.state = "ready";
@@ -440,11 +395,6 @@ async function readMuseStream(streamResponse, runId) {
     if (event.type === "delta" && typeof event.text === "string" && event.text) {
       generatedText += event.text;
       generatedResponse = generatedText;
-      if (!activeAssistantMessage) {
-        activeAssistantMessage = addMessage("assistant", "", new Date().toISOString(), true);
-      }
-      activeAssistantMessage.content.textContent = generatedText;
-      conversationList.scrollTop = conversationList.scrollHeight;
       speechRemainder += event.text;
       setEmotion(generatedText);
       const { sentences, remainder } = extractSentences(cleanSpeechText(speechRemainder));
@@ -501,7 +451,6 @@ function enqueueTurn(text) {
     return;
   }
   clearError();
-  addMessage("user", question);
   responseQueue.push({ question, turnId: crypto.randomUUID() });
   void processResponseQueue();
 }
@@ -521,7 +470,6 @@ async function processResponseQueue() {
       activeResponseController = controller;
       responseInProgress = true;
       generatedResponse = "";
-      activeAssistantMessage = null;
       stopResponseButton.disabled = false;
       setAgentState("thinking", "Thinking");
 
@@ -559,14 +507,6 @@ async function processResponseQueue() {
         }
         const answer = await readMuseStream(result, runId);
         generatedResponse = answer;
-        if (activeAssistantMessage) {
-          activeAssistantMessage.message.classList.remove("message-pending");
-          activeAssistantMessage.time.dateTime = new Date().toISOString();
-          activeAssistantMessage.time.textContent = new Date().toLocaleTimeString([], {
-            hour: "numeric",
-            minute: "2-digit",
-          });
-        }
         chatHistory.push(
           { role: "user", content: question },
           { role: "assistant", content: answer },
@@ -585,9 +525,6 @@ async function processResponseQueue() {
           }, 1600);
         }
       } catch (error) {
-        if (activeAssistantMessage) {
-          activeAssistantMessage.message.classList.remove("message-pending");
-        }
         if (controller.signal.aborted) {
           setAgentState(
             microphoneActive ? "listening" : "idle",
@@ -598,7 +535,6 @@ async function processResponseQueue() {
           setAgentState("error", "Something went wrong");
         }
       } finally {
-        activeAssistantMessage = null;
         if (activeResponseController === controller) {
           activeResponseController = null;
         }
@@ -747,7 +683,7 @@ async function startMicrophone() {
   silenceGain = captureContext.createGain();
   silenceGain.gain.value = 0;
   audioProcessor.onaudioprocess = (event) => {
-    if (!sttSocket || sttSocket.readyState !== WebSocket.OPEN) {
+    if (responseInProgress || !sttSocket || sttSocket.readyState !== WebSocket.OPEN) {
       return;
     }
     if (sttSocket.bufferedAmount > 512 * 1024) {
@@ -800,9 +736,6 @@ function handleSttEvent(event) {
       sttReadyReject = null;
       break;
     case "speechStart":
-      if (responseInProgress && avatar.dataset.state === "speaking") {
-        interruptResponse("Listening to your interruption");
-      }
       if (!responseInProgress) {
         setAgentState("listening", "Listening");
       }
@@ -818,7 +751,8 @@ function handleSttEvent(event) {
       }
       break;
     case "speechComplete":
-      if (typeof event.transcript === "string" && event.transcript.trim()) {
+      if (!assistantSpeaking && !responseInProgress
+        && typeof event.transcript === "string" && event.transcript.trim()) {
         enqueueTurn(event.transcript);
       }
       break;
