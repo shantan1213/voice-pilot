@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Voice-Pilot — Your Voice Assistant</title>
   <meta name="theme-color" content="#f6f7fb" />
-  <link rel="stylesheet" href="/static/styles.css?v=9" />
+  <link rel="stylesheet" href="/static/styles.css?v=10" />
 </head>
 <body>
   <main>
@@ -18,11 +18,10 @@
     </header>
 
     <section class="voice-stage" aria-labelledby="app-name">
-      <div class="eyebrow">YOUR PERSONAL VOICE ASSISTANT</div>
       <h1 id="app-name">Voice-Pilot</h1>
       <p id="agent-status" role="status" aria-live="polite" data-state="idle">Ready when you are</p>
 
-      <div id="avatar" class="avatar" data-state="idle" role="img" aria-label="Voice-Pilot is idle">
+      <div id="avatar" class="avatar" data-state="idle" data-emotion="calm" role="img" aria-label="Voice-Pilot is idle">
         <div class="avatar-halo"></div>
         <svg class="face" viewBox="0 0 240 240" aria-hidden="true">
           <defs>
@@ -43,7 +42,10 @@
             <ellipse class="eye" cx="83" cy="115" rx="7" ry="10" />
             <ellipse class="eye" cx="157" cy="115" rx="7" ry="10" />
           </g>
-          <path class="mouth" d="M101 154c7 9 17 13 27 13s20-4 27-13" fill="none" stroke="#5978b4" stroke-linecap="round" stroke-width="5" />
+          <path class="mouth mouth-calm" d="M101 154c7 9 17 13 27 13s20-4 27-13" fill="none" stroke="#5978b4" stroke-linecap="round" stroke-width="5" />
+          <path class="mouth mouth-joyful" d="M100 151c8 12 18 17 28 17s20-5 28-17c-2 17-11 25-28 25s-26-8-28-25Z" fill="#5978b4" />
+          <path class="mouth mouth-caring" d="M103 160c8-6 16-9 25-9s17 3 25 9" fill="none" stroke="#5978b4" stroke-linecap="round" stroke-width="5" />
+          <path class="mouth mouth-curious" d="M108 159c5-3 10-4 15-4" fill="none" stroke="#5978b4" stroke-linecap="round" stroke-width="5" />
           <path d="M105 206c8 5 17 7 27 7s19-2 27-7" fill="none" stroke="#aac4f6" stroke-linecap="round" stroke-width="3" opacity=".8" />
         </svg>
         <div class="sound-rings" aria-hidden="true"><i></i><i></i><i></i></div>
@@ -64,15 +66,11 @@
         <div class="panel-heading"><span>YOU SAID</span><span id="transcript-state">LIVE TRANSCRIPT</span></div>
         <p id="transcript" class="transcript">Your conversation will appear here.</p>
       </div>
-      <div class="response-panel">
-        <div class="panel-heading"><span>VOICE-PILOT</span><span id="response-state">READY</span></div>
-        <p id="response" class="response">Ask me anything. I’m listening.</p>
-      </div>
     </section>
 
     <footer><span>Private by design</span><span>Speech recognition &amp; AI require an internet connection</span></footer>
   </main>
 
-  <script src="/static/app.js?v=9"></script>
+  <script src="/static/app.js?v=10"></script>
 </body>
 </html>

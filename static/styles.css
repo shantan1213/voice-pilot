@@ -204,6 +204,11 @@ h1 {
 .mouth {
   transform-box: fill-box;
   transform-origin: center;
+  display: none;
+}
+
+.mouth-calm {
+  display: initial;
 }
 
 .sound-rings {
@@ -321,18 +326,13 @@ h1 {
   padding: 0.25rem 0 2rem;
 }
 
-.transcript-panel,
-.response-panel {
+.transcript-panel {
   min-height: 130px;
   padding: 1rem 1.1rem;
   border: 1px solid rgb(228 232 241 / 90%);
   border-radius: 16px;
   background: rgb(255 255 255 / 75%);
   box-shadow: 0 8px 26px rgb(38 57 99 / 3%);
-}
-
-.response-panel {
-  background: rgb(255 255 255 / 92%);
 }
 
 .panel-heading {
@@ -426,6 +426,51 @@ footer {
   box-shadow: 0 0 35px rgb(196 72 72 / 12%);
 }
 
+.avatar[data-emotion="joyful"] .avatar-halo {
+  background: radial-gradient(circle, rgb(255 218 185 / 74%), rgb(255 232 218 / 10%) 70%);
+  box-shadow: 0 0 38px rgb(247 167 119 / 22%);
+}
+
+.avatar[data-emotion="joyful"] .face-shape {
+  stroke: #f0cbb5;
+}
+
+.avatar[data-emotion="joyful"] .mouth-calm,
+.avatar[data-emotion="caring"] .mouth-calm,
+.avatar[data-emotion="curious"] .mouth-calm {
+  display: none;
+}
+
+.avatar[data-emotion="joyful"] .mouth-joyful,
+.avatar[data-emotion="caring"] .mouth-caring,
+.avatar[data-emotion="curious"] .mouth-curious {
+  display: initial;
+}
+
+.avatar[data-emotion="caring"] .avatar-halo {
+  background: radial-gradient(circle, rgb(185 229 225 / 68%), rgb(222 244 240 / 10%) 70%);
+  box-shadow: 0 0 38px rgb(106 189 177 / 20%);
+}
+
+.avatar[data-emotion="caring"] .face-shape {
+  stroke: #b7ddd9;
+}
+
+.avatar[data-emotion="curious"] .avatar-halo {
+  background: radial-gradient(circle, rgb(218 204 255 / 68%), rgb(237 230 255 / 10%) 70%);
+  box-shadow: 0 0 38px rgb(151 125 219 / 20%);
+}
+
+.avatar[data-emotion="curious"] .face-shape {
+  stroke: #c9baf0;
+}
+
+.avatar[data-emotion="joyful"][data-state="speaking"] .mouth-joyful,
+.avatar[data-emotion="caring"][data-state="speaking"] .mouth-caring,
+.avatar[data-emotion="curious"][data-state="speaking"] .mouth-curious {
+  animation: talking 210ms ease-in-out infinite alternate;
+}
+
 @keyframes idle-float {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-4px); }
@@ -496,8 +541,7 @@ footer {
     padding-bottom: 1.25rem;
   }
 
-  .transcript-panel,
-  .response-panel {
+  .transcript-panel {
     min-height: 100px;
     padding: 0.85rem 0.95rem;
   }

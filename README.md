@@ -1,20 +1,25 @@
 # Voice-Pilot
 
-Voice-Pilot is a browser-based voice assistant. Speak naturally, see the
-transcript appear as you talk, and receive a progressively rendered Muse Spark
-answer that is spoken aloud using a locally running MMS-TTS voice.
+Voice-Pilot is a browser-based voice assistant. Speak naturally, see your
+transcript appear as you talk, and hear a Muse Spark answer spoken aloud using
+a locally running MMS-TTS voice.
 
 ## Features
 
 - Live microphone transcription through Meta Muse Voice Transcribe.
 - Interim and finalized transcript events over a browser-to-FastAPI WebSocket.
-- Muse Spark responses streamed into the page using server-sent events (SSE).
+- Muse Spark responses streamed from the backend using server-sent events
+  (SSE) and spoken sentence by sentence; assistant text is not displayed as a
+  second transcript.
 - Complete assistant turns are kept in browser memory and sent as context on
   later turns.
 - Completed sentences are synthesized locally with `facebook/mms-tts-eng` and
   played in order. Text streaming does not wait for speech synthesis.
-- Animated SVG assistant face with idle, listening, thinking, and speaking
-  states. The mouth animation follows audio playback rather than phonemes.
+- The main conversation view shows your transcript; the assistant answer is
+  spoken rather than shown as a second transcript.
+- Lightweight animated SVG face with idle, listening, thinking, and speaking
+  states, plus subtle color and expression changes for broad response moods.
+  The mouth animation follows audio playback rather than phonemes.
 - A stop button and voice-interruption handling; no automatic retry of partial
   responses.
 - Optional Pocket TTS remains available from the backend when separately
@@ -155,10 +160,11 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 Open [http://127.0.0.1:8000](http://127.0.0.1:8000). Allow microphone access,
 then select the large microphone button. Speak a short question and pause:
 the interim transcript should appear first, followed by the finalized turn.
-Muse Spark text then streams into the response panel, while each completed
-sentence is synthesized by MMS and played in order. Press **Stop response** or
-begin speaking while Voice-Pilot is speaking to interrupt it. Select the
-microphone button again to finish the listening session.
+Muse Spark text streams to the browser and is synthesized by MMS one completed
+sentence at a time; the assistant answer is spoken, not shown as a transcript.
+Press **Stop response** or begin speaking while Voice-Pilot is speaking to
+interrupt it. Select the microphone button again to finish the listening
+session.
 
 Starting the microphone is a browser gesture that resumes the Web Audio context.
 If the browser blocks playback, allow sound for the site and click the
@@ -180,8 +186,10 @@ python -m unittest discover -s tests -v
 
 Use the browser for the end-to-end microphone → transcription → Muse Spark →
 MMS speech test. The browser needs microphone permission and a working speaker
-or headphones. To test MMS WAV generation directly, run this while the app is
-running; it saves a uniquely named WAV to the Windows temporary directory:
+or headphones. The user transcript remains visible; Voice-Pilot speaks its
+response without echoing that response into another transcript panel. To test
+MMS WAV generation directly, run this while the app is running; it saves a
+uniquely named WAV to the Windows temporary directory:
 
 ```powershell
 $wav = Join-Path $env:TEMP ("voice-pilot-test-" + [guid]::NewGuid() + ".wav")
@@ -254,7 +262,8 @@ browser rather than this command to verify progressive rendering and playback.
 - TTS audio is local after model download; the first download requires
   Hugging Face connectivity.
 - Speech synthesis is sentence-by-sentence, not token-by-token audio streaming.
-  The face mouth animation is approximate and is not synchronized to phonemes.
+  Small audio fades reduce clicks between clips; the face mood and mouth
+  animation are approximate and are not synchronized to phonemes.
 - Conversation history is kept in browser memory and is lost on page reload.
   Older turns are trimmed from the context request to keep it bounded.
 - Review Meta Model API terms/privacy policies and the Hugging Face model cards

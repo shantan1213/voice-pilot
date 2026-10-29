@@ -224,7 +224,13 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
     messages = [
         {
             "role": "developer",
-            "content": "You are Voice-Pilot, a friendly and concise voice assistant. Answer clearly and naturally.",
+            "content": (
+                "You are Voice-Pilot, a friendly voice assistant. Answer in clear, "
+                "natural spoken language using short conversational paragraphs. "
+                "Do not use Markdown, bullet points, numbered lists, or decorative "
+                "symbols; say list items as connected sentences. Keep the answer "
+                "concise unless the user asks for detail."
+            ),
         },
         *[message.model_dump() for message in request.messages],
     ]

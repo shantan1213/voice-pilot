@@ -185,6 +185,7 @@ class ChatEndpointTests(unittest.TestCase):
         )
         self.assertEqual(captured_messages[0]["role"], "developer")
         self.assertIn("Voice-Pilot", captured_messages[0]["content"])
+        self.assertIn("Do not use Markdown", captured_messages[0]["content"])
         self.assertEqual(captured_messages[-1], {"role": "user", "content": "Hi"})
 
     def test_endpoint_rejects_context_over_limit(self):

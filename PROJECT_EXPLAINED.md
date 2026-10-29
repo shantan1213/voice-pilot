@@ -1,9 +1,10 @@
 # Voice-Pilot, Explained
 
 This guide walks through the implementation in beginner-friendly language. The
-backend and browser exchange live microphone audio, streamed text, and WAV
-audio; Meta STT and Muse Spark are hosted APIs, while MMS text-to-speech runs
-locally in Python.
+backend and browser exchange live microphone audio, streamed answer text, and
+WAV audio; Meta STT and Muse Spark are hosted APIs, while MMS text-to-speech
+runs locally in Python. The answer text is used for speech and conversation
+history, not shown as a second transcript in the UI.
 
 ## 1. What Voice-Pilot does
 
@@ -15,9 +16,11 @@ the basic voice-assistant loop:
 3. Generate an answer using a conversational model.
 4. Turn the answer text into speech and play it.
 
-The browser shows partial transcripts and the assistant's streamed answer as
-they arrive. The assistant speaks complete sentences in order; it does not
-stream synthesized audio token by token.
+The browser shows partial transcripts while the assistant's streamed answer is
+used internally to prepare speech. The main screen shows the user's transcript
+and speaks the assistant's answer rather than displaying a second answer
+transcript. It speaks complete sentences in order; it does not stream
+synthesized audio token by token.
 
 ## 2. High-level architecture
 
@@ -32,7 +35,8 @@ flowchart TD
     C -->|OpenAI-compatible Chat Completions, stream true| M[Meta Muse Spark]
     M -->|Text deltas| C
     C -->|Server-sent events| B
-    B -->|Display each text delta immediately| V[Voice-Pilot response view]
+    B -->|Keep text for history and speech only| V[Voice-Pilot response state]
+    B -->|Show finalized user transcript| U2[Transcript view]
     B -->|Queue complete sentence| T[FastAPI /api/tts]
     T -->|Local Python inference| MMS[facebook/mms-tts-eng]
     MMS -->|PCM WAV response| B
@@ -61,7 +65,8 @@ flowchart TD
    locally, returns a WAV file, and removes its temporary server-side file
    after the response is delivered.
 8. The browser checks that the response is WAV, decodes it with the separate
-   Web Audio playback context, and plays one sentence at a time. It does not
+   Web Audio playback context, and plays one sentence at a time. A short
+   gain-envelope fade at each clip edge helps prevent audible clicks. It does not
    start a second audio source over the current sentence.
 9. A stop request or detected speech interruption aborts the browser's active
    Muse request, stops current playback, and discards queued audio. A completed
@@ -114,13 +119,19 @@ parses each record and forwards text as its own SSE `delta` event. Empty
 choices and chunks without content are ignored; provider errors, timeouts,
 empty results, and unexpectedly terminated streams are reported to the page.
 The final `done` event marks a completed response. The browser uses
-`ReadableStream.getReader()` to parse SSE frames as they arrive, updates the
-response panel, and stores the complete successful answer for the next turn.
-History is held only in the current page and bounded before each request.
+`ReadableStream.getReader()` to parse SSE frames as they arrive, keeps the full
+answer in memory for speech and conversation history, and does not render the
+assistant answer into a transcript panel. History is held only in the current
+page and bounded before each request.
 
-If a request fails partway through, already-rendered text stays visible, but an
-incomplete assistant answer is not added as a completed history turn. The app
-does not retry that request automatically.
+The backend instruction asks Muse Spark for concise spoken prose without
+Markdown or numbered lists. The browser also removes common Markdown and list
+markers before sending a sentence to TTS, so symbols and list numbers are not
+read aloud.
+
+If a request fails partway through, any speech already played cannot be
+retracted, and an incomplete assistant answer is not added as a completed
+history turn. The app does not retry that request automatically.
 
 ## 7. How MMS-TTS creates speech
 
@@ -147,8 +158,9 @@ There are two distinct Web Audio contexts:
 The UI validates the HTTP status, `audio/wav` content type, WAV payload size,
 and browser decoding. A serial promise queue prevents overlapping sentences.
 The animated face enters its speaking state while an audio buffer plays. This
-is approximate timing, not lip synchronization. If sound is blocked, the page
-shows an audio error while keeping the streamed text available.
+is approximate timing, not lip synchronization. A lightweight keyword-based
+mood estimate changes the avatar's color and expression; it does not change
+the synthesized voice. If sound is blocked, the page shows an audio error.
 
 ## 9. Important files and directories
 

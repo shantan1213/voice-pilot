@@ -10,8 +10,6 @@ const enableAudioButton = document.getElementById("enable-audio");
 const errorMessage = document.getElementById("error-message");
 const transcript = document.getElementById("transcript");
 const transcriptState = document.getElementById("transcript-state");
-const response = document.getElementById("response");
-const responseState = document.getElementById("response-state");
 
 const STT_SAMPLE_RATE = 24000;
 const STT_SESSION_LIMIT_MS = 10 * 60 * 1000;
@@ -26,6 +24,7 @@ let sessionLimitTimer = null;
 let microphoneActive = false;
 let sttHadError = false;
 let finalTranscript = "";
+let generatedResponse = "";
 const chatHistory = [];
 let responseQueue = [];
 let responseQueueRunning = false;
@@ -88,8 +87,34 @@ function interruptResponse(status = "Response interrupted by your voice.") {
   stopCurrentAudio();
   responseInProgress = false;
   stopResponseButton.disabled = true;
-  responseState.textContent = "INTERRUPTED";
   setAgentState(microphoneActive ? "listening" : "idle", status);
+}
+
+function setEmotion(text) {
+  const content = text.toLowerCase();
+  let emotion = "calm";
+  if (/\b(congratulations|congrats|wonderful|fantastic|excellent|exciting|glad|happy|great job)\b/.test(content)) {
+    emotion = "joyful";
+  } else if (/\b(sorry|understand|difficult|tough|worried|concern|support|loss|painful)\b/.test(content)) {
+    emotion = "caring";
+  } else if (/\?|\b(curiously|curious|wonder|what if)\b/.test(content)) {
+    emotion = "curious";
+  }
+  avatar.dataset.emotion = emotion;
+}
+
+function cleanSpeechText(text) {
+  return text
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s*/gm, "")
+    .replace(/^\s*(?:[-*+]\s+|\d+[.)](?:\s+|$))/gm, "")
+    .replace(/^\s*>\s?/gm, "")
+    .replace(/[`*_~]/g, "")
+    .replace(/\s[-–—]\s/g, ", ")
+    .replace(/[ \t]+/g, " ")
+    .trim();
 }
 
 async function ensureAudioContext() {
@@ -152,11 +177,17 @@ async function playAudioBuffer(buffer, runId) {
   }
   const source = playbackContext.createBufferSource();
   source.buffer = buffer;
-  source.connect(playbackContext.destination);
+  const gain = playbackContext.createGain();
+  const fadeSeconds = Math.min(0.012, buffer.duration / 4);
+  gain.gain.setValueAtTime(0, playbackContext.currentTime);
+  gain.gain.linearRampToValueAtTime(1, playbackContext.currentTime + fadeSeconds);
+  gain.gain.setValueAtTime(1, playbackContext.currentTime + buffer.duration - fadeSeconds);
+  gain.gain.linearRampToValueAtTime(0, playbackContext.currentTime + buffer.duration);
+  source.connect(gain);
+  gain.connect(playbackContext.destination);
   activeAudioSource = source;
   avatar.dataset.state = "speaking";
   agentStatus.textContent = "Speaking";
-  responseState.textContent = "SPEAKING";
   audioDot.dataset.state = "speaking";
 
   return new Promise((resolve, reject) => {
@@ -166,7 +197,6 @@ async function playAudioBuffer(buffer, runId) {
       }
       if (runId === speechRunId && responseInProgress) {
         setAgentState("thinking", "Thinking");
-        responseState.textContent = "THINKING";
         audioDot.dataset.state = "ready";
       }
       resolve();
@@ -195,7 +225,6 @@ function queueSpeech(sentence, runId) {
       activeTtsController = controller;
       audioDot.dataset.state = "loading";
       agentStatus.textContent = "Preparing voice";
-      responseState.textContent = "PREPARING AUDIO";
 
       try {
         const ttsResponse = await fetch("/api/tts", {
@@ -240,7 +269,7 @@ function queueSpeech(sentence, runId) {
         enableAudioButton.hidden = false;
         audioLabel.textContent = "Voice playback error · text is still available";
         showError(error instanceof Error ? error.message : "Could not play the spoken response.");
-        setAgentState("error", "Response text is available");
+        setAgentState("error", "Voice playback needs attention");
       } finally {
         if (activeTtsController === controller) {
           activeTtsController = null;
@@ -303,9 +332,10 @@ async function readMuseStream(streamResponse, runId) {
     }
     if (event.type === "delta" && typeof event.text === "string" && event.text) {
       generatedText += event.text;
-      response.textContent = generatedText;
+      generatedResponse = generatedText;
       speechRemainder += event.text;
-      const { sentences, remainder } = extractSentences(speechRemainder);
+      setEmotion(generatedText);
+      const { sentences, remainder } = extractSentences(cleanSpeechText(speechRemainder));
       speechRemainder = remainder;
       sentences.forEach((sentence) => {
         void queueSpeech(sentence, runId);
@@ -344,7 +374,7 @@ async function readMuseStream(streamResponse, runId) {
     throw new Error("Muse Spark returned an empty response.");
   }
   if (speechRemainder.trim()) {
-    await queueSpeech(speechRemainder, runId);
+    await queueSpeech(cleanSpeechText(speechRemainder), runId);
   }
   return generatedText;
 }
@@ -377,9 +407,8 @@ async function processResponseQueue() {
       const runId = speechRunId;
       activeResponseController = controller;
       responseInProgress = true;
+      generatedResponse = "";
       stopResponseButton.disabled = false;
-      response.textContent = "";
-      responseState.textContent = "THINKING";
       setAgentState("thinking", "Thinking");
 
       try {
@@ -415,22 +444,24 @@ async function processResponseQueue() {
           throw new Error(message);
         }
         const answer = await readMuseStream(result, runId);
+        generatedResponse = answer;
         chatHistory.push(
           { role: "user", content: question },
           { role: "assistant", content: answer },
         );
         await speechQueue;
         if (controller.signal.aborted) {
-          responseState.textContent = "INTERRUPTED";
+          setAgentState(microphoneActive ? "listening" : "idle", "Response interrupted");
         } else {
-          responseState.textContent = "COMPLETE";
           setAgentState(microphoneActive ? "listening" : "idle", "Ready for your next question");
         }
       } catch (error) {
         if (controller.signal.aborted) {
-          responseState.textContent = response.textContent ? "INTERRUPTED" : "STOPPED";
+          setAgentState(
+            microphoneActive ? "listening" : "idle",
+            generatedResponse ? "Response interrupted" : "Response stopped",
+          );
         } else {
-          responseState.textContent = "ERROR";
           showError(error instanceof Error ? error.message : "Voice-Pilot could not complete the response.");
           setAgentState("error", "Something went wrong");
         }
