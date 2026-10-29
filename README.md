@@ -155,11 +155,10 @@ text, and a unique turn ID. Repeated turn IDs are ignored, including after a
 server restart. Interim STT text, raw audio, API keys, and tokens are never
 logged.
 
-The history view reads the saved logs. Use **Clear history** and confirm to
-delete saved conversation `.txt` files. You can also remove the specific
-`conversation_logs` directory after stopping the server. It is ignored by Git,
-along with generated audio and other local runtime data. Conversation text is
-private to this machine unless you deliberately share those files.
+The backend clears saved conversation logs when it starts, so every server run
+begins with a fresh history. During a run, the browser sends at most the five
+most recent completed turns to Muse Spark. Generated logs remain private to
+this machine and are ignored by Git.
 
 Voice-Pilot sends microphone audio to Meta for transcription and conversation
 text to Muse Spark. Review your provider account's data retention and privacy

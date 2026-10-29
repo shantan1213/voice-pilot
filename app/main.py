@@ -48,6 +48,7 @@ conversation_logs = ConversationLogWorker(CONVERSATION_LOG_DIR)
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     await conversation_logs.start()
+    await conversation_logs.clear()
     try:
         yield
     finally:

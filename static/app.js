@@ -13,6 +13,7 @@ const voiceModel = document.getElementById("voice-model");
 const STT_SAMPLE_RATE = 24000;
 const STT_SESSION_LIMIT_MS = 10 * 60 * 1000;
 const MAX_QUEUED_TURNS = 8;
+const MAX_CONTEXT_TURNS = 5;
 const sessionId = sessionStorage.getItem("voicePilotSessionId") || crypto.randomUUID();
 sessionStorage.setItem("voicePilotSessionId", sessionId);
 let sttSocket = null;
@@ -632,7 +633,7 @@ async function processResponseQueue() {
         for (let index = chatHistory.length - 2; index >= 0; index -= 2) {
           const pair = chatHistory.slice(index, index + 2);
           const pairCharacters = pair.reduce((total, message) => total + message.content.length, 0);
-          if (responseMessages.length + pair.length >= 38
+          if (responseMessages.length / 2 >= MAX_CONTEXT_TURNS
             || contextCharacters + pairCharacters > 20000) {
             break;
           }
