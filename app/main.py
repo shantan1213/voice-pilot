@@ -43,21 +43,31 @@ CHAT_MAX_TOTAL_CHARACTERS = 24_000
 CHAT_TIMEOUT = httpx.Timeout(connect=10, read=90, write=20, pool=10)
 CONVERSATION_LOG_DIR = BASE_DIR / "conversation_logs"
 conversation_logs = ConversationLogWorker(CONVERSATION_LOG_DIR)
+tts_warmup_task: asyncio.Task[None] | None = None
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    global tts_warmup_task
+
     await conversation_logs.start()
     await conversation_logs.clear()
-    try:
-        from app.tts import warm_mms_model
+    from app.tts import warm_mms_model
 
-        await asyncio.to_thread(warm_mms_model)
-    except Exception:
-        logger.exception("MMS-TTS warm-up failed; it will retry on the first voice response.")
+    async def warm_tts_in_background() -> None:
+        try:
+            await asyncio.to_thread(warm_mms_model)
+        except Exception:
+            logger.exception("MMS-TTS warm-up failed; it will retry on the first voice response.")
+
+    tts_warmup_task = asyncio.create_task(warm_tts_in_background())
     try:
         yield
     finally:
+        if tts_warmup_task is not None and not tts_warmup_task.done():
+            tts_warmup_task.cancel()
+            await asyncio.gather(tts_warmup_task, return_exceptions=True)
+        tts_warmup_task = None
         await conversation_logs.stop()
 
 
@@ -70,7 +80,7 @@ class TTSRequest(BaseModel):
     """Request body for local text-to-speech."""
 
     text: str = Field(min_length=1, max_length=1000)
-    model: Literal["mms", "pocket-indian"] = "mms"
+    model: Literal["mms"] = "mms"
 
 
 class ChatMessage(BaseModel):
@@ -360,27 +370,6 @@ def tts(request: TTSRequest) -> FileResponse:
             status_code=500, detail="Speech synthesis failed."
         ) from exc
 
-
-@app.post("/api/tts/stream")
-def tts_stream(request: TTSRequest) -> StreamingResponse:
-    """Stream Pocket TTS as raw 24 kHz mono PCM16 audio."""
-    if request.model != "pocket-indian":
-        raise HTTPException(
-            status_code=400,
-            detail="Streaming speech is only available for the Pocket Indian-English voice.",
-        )
-
-    from app.tts import stream_pocket_pcm16
-
-    try:
-        audio_stream = stream_pocket_pcm16(request.text)
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return StreamingResponse(
-        audio_stream,
-        media_type="audio/pcm;rate=24000;channels=1",
-        headers={"Cache-Control": "no-cache", "X-Content-Type-Options": "nosniff"},
-    )
 
 
 @app.websocket("/api/stt")

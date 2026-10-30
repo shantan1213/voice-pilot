@@ -562,6 +562,55 @@ footer {
   }
 }
 
+/* Use the available desktop canvas while keeping the compact mobile layout. */
+main {
+  width: min(100% - 4rem, 1240px);
+  min-height: 100dvh;
+}
+
+.voice-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  justify-content: center;
+  padding: clamp(1.5rem, 4vh, 3.5rem) 0;
+}
+
+.avatar {
+  width: clamp(230px, 24vw, 300px);
+  height: clamp(230px, 24vw, 300px);
+  margin: clamp(0.75rem, 2vh, 1.5rem) 0;
+}
+
+.face {
+  width: 78%;
+  height: 78%;
+}
+
+footer {
+  flex-shrink: 0;
+}
+
+@media (max-width: 600px) {
+  main {
+    width: min(100% - 1.25rem, 480px);
+  }
+
+  .voice-stage {
+    min-height: 0;
+  }
+
+  .avatar {
+    width: 196px;
+    height: 196px;
+    margin-top: 0.75rem;
+  }
+
+  .face {
+    width: 160px;
+    height: 160px;
+  }
+}
+
 :root {
   --ink: #1d2340;
   --muted: #7881a0;

@@ -5,21 +5,21 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Voice-Pilot — Your Voice Assistant</title>
   <meta name="theme-color" content="#f3f5ff" />
-  <link rel="stylesheet" href="/static/styles.css?v=11" />
+  <link rel="stylesheet" href="/static/styles.css?v=12" />
 </head>
 <body>
   <main>
     <header class="topbar">
       <a class="brand" href="/" aria-label="Voice-Pilot home">
-        <span class="brand-mark" aria-hidden="true">V</span>
-        <span>Voice-Pilot</span>
+        <span class="brand-mark" aria-hidden="true">R</span>
+        <span>Raala</span>
       </a>
       <span class="connection"><span id="connection-dot"></span><span id="connection-label">Connecting</span></span>
     </header>
 
     <section class="voice-stage" aria-labelledby="app-name">
       <h1 id="app-name">Voice-Pilot</h1>
-      <p id="agent-status" role="status" aria-live="polite" data-state="idle">Ready when you are</p>
+      <p id="agent-status" role="status" aria-live="polite" data-state="idle">Hello there! I'm Raala, your Voice-Pilot assistant. Tap the microphone and start speaking.</p>
 
       <div id="avatar" class="avatar" data-state="idle" data-emotion="calm" role="img" aria-label="Voice-Pilot is idle">
         <div class="avatar-halo"></div>
@@ -61,13 +61,13 @@
         </button>
         <button id="stop-response" class="interrupt-button" type="button" disabled>Stop response</button>
       </div>
-      <div class="audio-indicator"><span id="audio-dot"></span><span id="audio-label">Voice replies on</span><select id="voice-model" aria-label="Voice model"><option value="mms">MMS English · WAV</option><option value="pocket-indian">Pocket Indian English · stream</option></select><button id="enable-audio" class="enable-audio" type="button" hidden>Enable voice</button></div>
+      <div class="audio-indicator"><span id="audio-dot"></span><span id="audio-label">MMS English voice replies on</span><button id="enable-audio" class="enable-audio" type="button" hidden>Enable voice</button></div>
       <p id="error-message" class="error-message" role="alert" hidden></p>
     </section>
 
     <footer><span>Private on this device</span><span>Speech recognition &amp; AI require an internet connection</span></footer>
   </main>
 
-  <script src="/static/app.js?v=16"></script>
+  <script src="/static/app.js?v=29"></script>
 </body>
 </html>

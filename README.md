@@ -122,8 +122,7 @@ Transformers downloads and lazily initializes the model on the first TTS
 request, then reuses it. The model weights are cached outside the repository.
 
 Muse Voice Transcribe (`muse-voice-transcribe-1.0`) and Muse Spark
-(`muse-spark-1.3`) are hosted Meta services, not local downloads. The optional
-Pocket TTS backend is not required by the main interface.
+(`muse-spark-1.3`) are hosted Meta services, not local downloads.
 
 ## Run Voice-Pilot
 
