@@ -9,10 +9,10 @@ The browser supplies microphone audio to the `/api/stt` WebSocket as binary PCM 
 ```mermaid
 flowchart TD
   G[getUserMedia] --> P[Audio processing in app.js]
-  P -->|binary PCM frame| W[/api/stt WebSocket]
-  W --> V{frame valid?}
-  V -- no --> E[error event and endStream]
-  V -- yes --> R[forward to Meta ASR]
+  P -->|binary PCM frame| W[STT WebSocket]
+  W --> V{frame valid}
+  V -- no --> E[error event and end stream]
+  V -- yes --> R[forward to Meta speech service]
   R --> X[transcript events]
 ```
 

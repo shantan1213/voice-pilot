@@ -8,13 +8,13 @@ At worker start, existing markers are scanned so the `(session_id, turn_id)` pai
 
 ```mermaid
 flowchart TD
-  R[POST history/turn] --> Q{queue capacity}
+  R[history turn request] --> Q{queue capacity}
   Q -- available --> W[background writer]
   Q -- duplicate --> D[status duplicate]
-  Q -- full --> E[503]
+  Q -- full --> E[queue full error]
   W --> F[session UUID text file]
-  G[GET history] --> S[snapshot read]
-  C[DELETE history] --> Q2[ordered clear request]
+  G[history request] --> S[snapshot read]
+  C[clear history request] --> Q2[ordered clear request]
 ```
 
 Logs contain completed text only: no API keys, raw audio, interim STT, or provider tokens. Files are runtime data and ignored by Git. See [`conversation_logs.py`](../app/conversation_logs.py) and [privacy](16-security-and-privacy.md).

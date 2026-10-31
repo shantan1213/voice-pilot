@@ -4,17 +4,17 @@ The running app is a FastAPI process plus one static browser client. `app.main:a
 
 ```mermaid
 flowchart LR
-  B[Browser static/app.js] -->|WebSocket PCM| F[FastAPI app.main]
-  F <-->|wss JSON and audio| A[Meta Muse Voice Transcribe]
-  F -->|HTTP SSE| M[Meta Muse Spark]
-  M -->|delta events| F
-  F -->|SSE to browser| B
-  B -->|POST sentence| F
-  F -->|local inference| T[MMS-TTS VITS]
-  T -->|WAV bytes| F
-  F -->|audio/wav| B
-  F --> Q[ConversationLogWorker]
-  Q --> D[conversation_logs/session-*.txt]
+  B[Browser frontend] -->|PCM over WebSocket| F[FastAPI backend]
+  F <-->|JSON and audio over WebSocket| A[Meta speech recognition]
+  F -->|HTTP streaming| M[Meta language model]
+  M -->|text deltas| F
+  F -->|server sent events| B
+  B -->|sentence request| F
+  F -->|local inference| T[Local MMS voice model]
+  T -->|WAV audio bytes| F
+  F -->|WAV response| B
+  F --> Q[Conversation log worker]
+  Q --> D[Session text files]
 ```
 
 ## 🔄 Request paths

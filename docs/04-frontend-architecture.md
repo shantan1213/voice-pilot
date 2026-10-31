@@ -14,10 +14,10 @@ stateDiagram-v2
   thinking --> speaking: first audio
   speaking --> listening: playback complete
   speaking --> idle: stop response
-  listening --> idle: stop/error
+  listening --> idle: stop or error
   thinking --> error: stream failure
-  speaking --> error: TTS/playback failure
-  error --> idle: dismiss/reset
+  speaking --> error: voice playback failure
+  error --> idle: reset
 ```
 
 Status text and `data-state`/`data-emotion` attributes drive CSS/avatar changes. The document exposes `role=status` and `role=alert`; reduced-motion rules are in CSS. The backend is the source of provider truth, so the UI should display returned error messages rather than inventing provider states.

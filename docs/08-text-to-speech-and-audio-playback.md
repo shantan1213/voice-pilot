@@ -7,16 +7,16 @@ MMS model ID is `facebook/mms-tts-eng`. It is loaded once, on startup warm-up or
 ```mermaid
 sequenceDiagram
   participant B as Browser sentence queue
-  participant F as /api/tts
-  participant S as semaphore
-  participant M as MMS VITS
-  B->>F: JSON sentence
-  F->>S: acquire (max 2)
-  S->>M: synthesize in worker thread
-  M-->>F: WAV bytes
-  F-->>B: audio/wav
+  participant API as TTS endpoint
+  participant LIMIT as TTS limit
+  participant MMS as MMS voice model
+  B->>API: JSON sentence
+  API->>LIMIT: acquire capacity
+  LIMIT->>MMS: synthesize in worker thread
+  MMS-->>API: WAV bytes
+  API-->>B: WAV audio
   B->>B: decodeAudioData and BufferSource playback
-  B->>S: next sentence request
+  B->>API: next sentence request
 ```
 
 The client serializes playback so sentences retain order and can be interrupted. A first-use model download/load can dominate latency; `/api/health` exposes `model_ready` for warm-up visibility. See [performance](15-performance-and-latency.md).

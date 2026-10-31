@@ -10,9 +10,9 @@ flowchart LR
   D --> H[Meta HTTP stream]
   H --> P[parse data lines]
   P --> S[delta SSE]
-  P --> F{finished with text?}
+  P --> F{finished with text}
   F -- yes --> Done[done SSE]
-  F -- no --> Retry[one empty-stream retry or error SSE]
+  F -- no --> Retry[retry once or emit error]
 ```
 
 Timeouts are connect 10s, read 45s, write 20s, pool 10s. Provider HTTP errors are reduced to a safe message (up to 500 characters); authorization is never included in an event. Source: `_stream_muse_chat` and `chat_stream` in [`app/main.py`](../app/main.py).

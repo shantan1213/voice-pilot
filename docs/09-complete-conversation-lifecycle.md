@@ -12,7 +12,7 @@ sequenceDiagram
   participant MMS as MMS
   participant HIST as history worker
   U->>B: speak
-  B->>F: start + PCM
+  B->>F: start and PCM
   F->>ASR: handshake and PCM
   ASR-->>B: interim transcript
   U->>B: stop speaking
@@ -20,7 +20,7 @@ sequenceDiagram
   B->>F: chat context
   F->>SPARK: streamed completion
   SPARK-->>B: delta SSE events
-  B->>F: one sentence at a time
+  B->>F: sentence request
   F->>MMS: local synthesis
   MMS-->>B: WAV
   B->>B: sequential playback

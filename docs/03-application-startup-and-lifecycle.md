@@ -12,7 +12,7 @@ sequenceDiagram
   UV->>LIFE: enter lifespan
   LIFE->>HIST: start and clear files
   LIFE->>CLIENT: create shared AsyncClient
-  LIFE->>LIFE: create TTS semaphore
+  LIFE->>LIFE: create TTS limit
   LIFE->>WARM: start background warm_mms_model
   LIFE-->>UV: yield and serve requests
   UV->>LIFE: exit lifespan
