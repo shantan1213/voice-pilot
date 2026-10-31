@@ -191,6 +191,14 @@ function setEmotion(text) {
     emotion = "joyful";
   } else if (/\b(sorry|understand|difficult|tough|worried|concern|support|loss|painful)\b/.test(content)) {
     emotion = "caring";
+  } else if (/\b(joke|funny|haha|laugh|playful|game|fun)\b/.test(content)) {
+    emotion = "playful";
+  } else if (/\b(wow|amazing|incredible|unbelievable|whoa)\b/.test(content)) {
+    emotion = "surprised";
+  } else if (/\b(tired|sleepy|sleep|good night|exhausted|yawn)\b/.test(content)) {
+    emotion = "sleepy";
+  } else if (/\b(sad|crying|tears|lonely|heartbroken)\b/.test(content)) {
+    emotion = "sad";
   } else if (/\?|\b(curiously|curious|wonder|what if)\b/.test(content)) {
     emotion = "curious";
   }
