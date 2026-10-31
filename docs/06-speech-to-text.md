@@ -12,18 +12,18 @@ After an upstream acknowledgement containing `sessionId`, the browser receives `
 sequenceDiagram
   participant B as Browser
   participant F as FastAPI
-  participant M as Meta ASR
+  participant ASR as Meta ASR
   B->>F: start
-  F->>M: handshake
-  M-->>F: sessionId ack
+  F->>ASR: handshake
+  ASR-->>F: sessionId ack
   F-->>B: ready
   B->>F: PCM binary frames
-  F->>M: PCM frames
-  M-->>F: speechComplete/transcript
+  F->>ASR: PCM frames
+  ASR-->>F: speechComplete transcript
   F-->>B: transcript event
   B->>F: stop
-  F->>M: endStream
-  M-->>F: final events
+  F->>ASR: endStream
+  ASR-->>F: final events
   F-->>B: sessionComplete
 ```
 
