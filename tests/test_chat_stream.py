@@ -1,4 +1,5 @@
 import asyncio
+import io
 import json
 import os
 import tempfile
@@ -310,7 +311,11 @@ class ExistingEndpointTests(unittest.TestCase):
     def test_health_keeps_legacy_phase_and_uses_new_name(self):
         with TestClient(main.app) as client:
             response = client.get("/api/health")
-        self.assertEqual(response.json(), {"status": "ok", "phase": 1, "app": "Voice-Pilot"})
+        data = response.json()
+        self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["phase"], 1)
+        self.assertEqual(data["app"], "Voice-Pilot")
+        self.assertIsInstance(data.get("model_ready"), bool)
 
     def test_history_turn_is_queued_deduplicated_listed_and_cleared(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -341,16 +346,18 @@ class ExistingEndpointTests(unittest.TestCase):
         self.assertEqual(empty_history.json(), {"turns": []})
 
     def test_tts_still_returns_a_playable_wav_response(self):
-        def fake_synthesis(text, output_path, model_name="mms"):
+        def fake_synthesis(text, model_name="mms"):
             self.assertEqual(text, "Hello from Voice-Pilot.")
             self.assertEqual(model_name, "mms")
-            with wave.open(str(output_path), "wb") as audio_file:
+            buf = io.BytesIO()
+            with wave.open(buf, "wb") as audio_file:
                 audio_file.setnchannels(1)
                 audio_file.setsampwidth(2)
                 audio_file.setframerate(24_000)
                 audio_file.writeframes(b"\x01\x00" * 256)
+            return buf.getvalue()
 
-        with patch("app.tts.synthesize_to_wav", side_effect=fake_synthesis):
+        with patch("app.tts.synthesize_to_bytes", side_effect=fake_synthesis):
             with TestClient(main.app) as client:
                 response = client.post(
                     "/api/tts",

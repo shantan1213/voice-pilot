@@ -8,3 +8,4 @@ torch==2.11.0
 transformers==5.22.0
 numpy==2.5.4
 soundfile==0.14.0
+pydantic-settings==2.8.1

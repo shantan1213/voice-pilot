@@ -85,6 +85,9 @@ class ConversationLogWorker:
         await self._queue.join()
         return await asyncio.to_thread(self._read_turns)
 
+    async def list_turns_snapshot(self) -> list[dict[str, str]]:
+        return await asyncio.to_thread(self._read_turns)
+
     async def clear(self) -> None:
         if self._worker is None or self._worker.done():
             raise RuntimeError("Conversation logging is not running.")

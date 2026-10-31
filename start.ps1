@@ -31,10 +31,18 @@ if (-not (Test-Path $python)) {
     }
 }
 
-Write-Host "Installing pinned dependencies..."
-& $python -m pip install -r requirements.txt
-if ($LASTEXITCODE -ne 0) {
-    Stop-WithError "Dependency installation failed."
+$requirementsHashPath = Join-Path $root ".venv\requirements.hash"
+$currentHash = (Get-FileHash -Path (Join-Path $root "requirements.txt") -Algorithm SHA256).Hash
+$cachedHash = if (Test-Path $requirementsHashPath) { (Get-Content $requirementsHashPath -Raw).Trim() } else { "" }
+if ($cachedHash -eq $currentHash -and (Test-Path $requirementsHashPath)) {
+    Write-Host "Dependencies up to date (requirements hash $currentHash)."
+} else {
+    Write-Host "Installing pinned dependencies..."
+    & $python -m pip install -r requirements.txt --disable-pip-version-check -q
+    if ($LASTEXITCODE -ne 0) {
+        Stop-WithError "Dependency installation failed."
+    }
+    Set-Content -Path $requirementsHashPath -Value $currentHash -NoNewline
 }
 
 if (-not (Test-Path $envFile)) {

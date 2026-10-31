@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import io
 import re
 import tempfile
 import threading
@@ -25,6 +26,77 @@ _model_lock = threading.RLock()
 def warm_mms_model() -> None:
     """Load MMS once during startup so the first spoken response is not cold."""
     _load_model()
+
+
+def is_model_ready() -> bool:
+    return _model is not None and _tokenizer is not None
+
+
+def synthesize_to_bytes(text: str, model_name: Literal["mms"] = "mms") -> bytes:
+    """Synthesize text to WAV bytes in memory without touching the filesystem."""
+    if not isinstance(text, str):
+        raise TypeError("text must be a string.")
+    text = text.strip()
+    if not text:
+        raise ValueError("text must not be empty.")
+    if len(text) > MAX_TEXT_LENGTH:
+        raise ValueError(f"text must be at most {MAX_TEXT_LENGTH} characters.")
+
+    with _model_lock:
+        import torch
+        from transformers import AutoTokenizer
+
+        tokenizer, model, device = _load_model()
+        sampling_rate = model.config.sampling_rate
+        if not isinstance(sampling_rate, int) or sampling_rate <= 0:
+            raise RuntimeError("The MMS model reported an invalid sampling rate.")
+
+        chunks = [
+            sentence.strip()
+            for sentence in re.split(r"(?<=[.!?])\s+|\n+", text)
+            if sentence.strip()
+        ]
+        audio_parts = []
+        for sentence in chunks:
+            inputs = tokenizer(sentence, return_tensors="pt").to(device)
+            with torch.inference_mode():
+                outputs = model(**inputs)
+            waveform = outputs.waveform
+            if (
+                waveform is None
+                or waveform.ndim != 2
+                or waveform.shape[0] != 1
+                or waveform.shape[1] == 0
+            ):
+                raise RuntimeError("The MMS model returned an invalid waveform.")
+            audio_parts.append(waveform[0].detach().cpu().numpy())
+
+        if not audio_parts:
+            raise RuntimeError("No speech segments were generated.")
+
+        import numpy as np
+        import soundfile as sf
+
+        silence = np.zeros(
+            round(sampling_rate * SENTENCE_PAUSE_SECONDS),
+            dtype=audio_parts[0].dtype,
+        )
+        audio_segments: list[np.ndarray] = []
+        for index, part in enumerate(audio_parts):
+            if index:
+                audio_segments.append(silence)
+            audio_segments.append(part)
+        audio = np.concatenate(audio_segments)
+
+        buffer = io.BytesIO()
+        sf.write(
+            buffer,
+            audio,
+            sampling_rate,
+            format="WAV",
+            subtype="PCM_16",
+        )
+        return buffer.getvalue()
 
 
 def _load_model():
@@ -96,79 +168,7 @@ def synthesize_to_wav(
     if target.exists() or target.is_symlink():
         raise FileExistsError(f"Refusing to overwrite existing file: {target}")
 
-    import soundfile as sf
-    import numpy as np
-
-    with _model_lock:
-        import torch
-        from transformers import AutoTokenizer
-
-        tokenizer, model, device = _load_model()
-        sampling_rate = model.config.sampling_rate
-        if not isinstance(sampling_rate, int) or sampling_rate <= 0:
-            raise RuntimeError("The MMS model reported an invalid sampling rate.")
-
-        chunks = [
-            sentence.strip()
-            for sentence in re.split(r"(?<=[.!?])\s+|\n+", text)
-            if sentence.strip()
-        ]
-        audio_parts = []
-        for sentence in chunks:
-            inputs = tokenizer(sentence, return_tensors="pt").to(device)
-            with torch.inference_mode():
-                outputs = model(**inputs)
-            waveform = outputs.waveform
-            if (
-                waveform is None
-                or waveform.ndim != 2
-                or waveform.shape[0] != 1
-                or waveform.shape[1] == 0
-            ):
-                raise RuntimeError("The MMS model returned an invalid waveform.")
-            audio_parts.append(waveform[0].detach().cpu().numpy())
-
-        if not audio_parts:
-            raise RuntimeError("No speech segments were generated.")
-
-        silence = np.zeros(
-            round(sampling_rate * SENTENCE_PAUSE_SECONDS),
-            dtype=audio_parts[0].dtype,
-        )
-        audio_segments = []
-        for index, part in enumerate(audio_parts):
-            if index:
-                audio_segments.append(silence)
-            audio_segments.append(part)
-        audio = np.concatenate(audio_segments)
-
-        fd, temp_name = tempfile.mkstemp(
-            prefix=".voice-pilot-tts-",
-            suffix=".wav",
-            dir=str(target.parent),
-        )
-        temp_path = Path(temp_name)
-
-        try:
-            os.close(fd)
-            sf.write(
-                str(temp_path),
-                audio,
-                sampling_rate,
-                format="WAV",
-                subtype="PCM_16",
-            )
-
-            try:
-                os.link(temp_path, target)
-            except FileExistsError as exc:
-                raise FileExistsError(f"Refusing to overwrite existing file: {target}") from exc
-            except OSError as exc:
-                raise OSError(f"Could not finalize WAV file at {target}.") from exc
-        finally:
-            try:
-                temp_path.unlink(missing_ok=True)
-            except OSError:
-                pass
+    wav_bytes = synthesize_to_bytes(text, model_name=model_name)
+    target.write_bytes(wav_bytes)
 
     return target

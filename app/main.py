@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import os
+import io
 import shutil
 import tempfile
 import uuid
@@ -26,6 +27,16 @@ from app.conversation_logs import ConversationLogWorker
 
 load_dotenv()
 
+try:
+    from app.settings import settings as _app_settings
+
+    _SETTINGS_CHAT_MODEL = _app_settings.muse_chat_model
+    _SETTINGS_API_KEY = _app_settings.model_api_key
+except Exception:
+    _app_settings = None
+    _SETTINGS_CHAT_MODEL = "muse-spark-1.3"
+    _SETTINGS_API_KEY = ""
+
 logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -37,23 +48,26 @@ ASR_MAX_SESSION_SECONDS = 600
 ASR_MAX_FRAME_BYTES = 64 * 1024
 ASR_MAX_SESSION_BYTES = ASR_SAMPLE_RATE * 2 * ASR_MAX_SESSION_SECONDS
 CHAT_COMPLETIONS_URL = "https://api.meta.ai/v1/chat/completions"
-CHAT_MODEL = os.getenv("MUSE_CHAT_MODEL", "muse-spark-1.3").strip()
+CHAT_MODEL = os.getenv("MUSE_CHAT_MODEL", _SETTINGS_CHAT_MODEL).strip()
 CHAT_MAX_MESSAGES = 40
 CHAT_MAX_TOTAL_CHARACTERS = 24_000
-CHAT_TIMEOUT = httpx.Timeout(connect=10, read=90, write=20, pool=10)
+CHAT_TIMEOUT = httpx.Timeout(connect=10, read=45, write=20, pool=10)
+CHAT_LIMITS = httpx.Limits(max_keepalive_connections=10, max_connections=10)
 CONVERSATION_LOG_DIR = BASE_DIR / "conversation_logs"
 conversation_logs = ConversationLogWorker(CONVERSATION_LOG_DIR)
 tts_warmup_task: asyncio.Task[None] | None = None
 _chat_client: httpx.AsyncClient | None = None
+_tts_semaphore: asyncio.Semaphore | None = None
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    global tts_warmup_task, _chat_client
+    global tts_warmup_task, _chat_client, _tts_semaphore
 
     await conversation_logs.start()
     await conversation_logs.clear()
-    _chat_client = httpx.AsyncClient(timeout=CHAT_TIMEOUT)
+    _chat_client = httpx.AsyncClient(timeout=CHAT_TIMEOUT, limits=CHAT_LIMITS)
+    _tts_semaphore = asyncio.Semaphore(2)
     from app.tts import warm_mms_model
 
     async def warm_tts_in_background() -> None:
@@ -70,6 +84,7 @@ async def lifespan(_app: FastAPI):
             tts_warmup_task.cancel()
             await asyncio.gather(tts_warmup_task, return_exceptions=True)
         tts_warmup_task = None
+        _tts_semaphore = None
         if _chat_client is not None:
             try:
                 await _chat_client.aclose()
@@ -91,7 +106,7 @@ async def _chat_client_context():
     if shared is not None:
         yield shared
         return
-    async with httpx.AsyncClient(timeout=CHAT_TIMEOUT) as fresh:
+    async with httpx.AsyncClient(timeout=CHAT_TIMEOUT, limits=CHAT_LIMITS) as fresh:
         yield fresh
 
 
@@ -132,7 +147,13 @@ class ConversationTurnRequest(BaseModel):
 @app.get("/api/health")
 def health() -> dict:
     """Liveness check for the backend."""
-    return {"status": "ok", "phase": 1, "app": "Voice-Pilot"}
+    try:
+        from app.tts import is_model_ready
+
+        model_ready = is_model_ready()
+    except Exception:
+        model_ready = False
+    return {"status": "ok", "phase": 1, "app": "Voice-Pilot", "model_ready": model_ready}
 
 
 def _sse_event(event: dict) -> str:
@@ -332,7 +353,7 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
 @app.get("/api/history")
 async def get_conversation_history() -> dict[str, list[dict[str, str]]]:
     """Return persisted completed turns for the local conversation view."""
-    return {"turns": await conversation_logs.list_turns()}
+    return {"turns": await conversation_logs.list_turns_snapshot()}
 
 
 @app.post("/api/history/turn", status_code=202)
@@ -366,33 +387,35 @@ async def clear_conversation_history() -> Response:
     return Response(status_code=204)
 
 
-@app.post("/api/tts", response_class=FileResponse)
-def tts(request: TTSRequest) -> FileResponse:
+@app.post("/api/tts")
+async def tts(request: TTSRequest) -> StreamingResponse:
     """Synthesize text and return its WAV audio."""
-    from app.tts import synthesize_to_wav
+    from app.tts import synthesize_to_bytes
 
     text = request.text.strip()
     if not text:
         raise HTTPException(status_code=422, detail="Text must not be empty.")
 
-    temp_dir: Path | None = None
     try:
-        temp_dir = Path(tempfile.mkdtemp(prefix="voice-pilot-tts-"))
-        audio_path = temp_dir / "speech.wav"
-        synthesize_to_wav(text, audio_path, model_name=request.model)
-        return FileResponse(
-            path=audio_path,
+        if _tts_semaphore is None:
+            wav_bytes = await asyncio.to_thread(synthesize_to_bytes, text, request.model)
+        else:
+            async with _tts_semaphore:
+                wav_bytes = await asyncio.to_thread(synthesize_to_bytes, text, request.model)
+        return StreamingResponse(
+            io.BytesIO(wav_bytes),
             media_type="audio/wav",
-            filename="voice-pilot.wav",
-            background=BackgroundTask(shutil.rmtree, temp_dir, ignore_errors=True),
+            headers={"Content-Disposition": 'attachment; filename="voice-pilot.wav"'},
         )
+    except (ValueError, TypeError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except FileExistsError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("TTS synthesis failed.")
-        if temp_dir is not None:
-            shutil.rmtree(temp_dir, ignore_errors=True)
-        raise HTTPException(
-            status_code=500, detail="Speech synthesis failed."
-        ) from exc
+        raise HTTPException(status_code=500, detail="Speech synthesis failed.") from exc
 
 
 
