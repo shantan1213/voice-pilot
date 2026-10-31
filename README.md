@@ -1,10 +1,17 @@
-# Voice-Pilot
+# 🎙️ Voice-Pilot
+
+[![Windows](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)](README.md)
+[![Python](https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white)](requirements.txt)
+[![FastAPI](https://img.shields.io/badge/API-FastAPI-009688?logo=fastapi&logoColor=white)](app/main.py)
+[![Docs](https://img.shields.io/badge/docs-source--verified-8B5CF6)](docs/00-documentation-index.md)
+
+> **Raala speaks. You listen.** A local-first voice assistant with a colorful animated interface, realtime transcription, streaming answers, and local speech synthesis.
 
 Voice-Pilot is a local-first voice assistant for Windows. Speak into your
 browser, follow the assistant's reply as it streams into a compact chat, and
 hear each completed sentence spoken by a locally hosted MMS-TTS model.
 
-## Table of contents
+## 🧭 Table of contents
 
 - [Features](#features)
 - [Architecture](#architecture)
@@ -18,8 +25,11 @@ hear each completed sentence spoken by a locally hosted MMS-TTS model.
 - [Troubleshooting](#troubleshooting)
 - [Project history](#project-history)
 - [Licensing](#licensing)
+- [📚 Technical documentation](docs/00-documentation-index.md)
 
-## Features
+> **📚 Technical documentation:** Read the [source-verified knowledge base](docs/00-documentation-index.md) for architecture, API contracts, audio flow, lifecycle, testing, security, and extension guidance.
+
+## ✨ Features
 
 - Realtime microphone transcription through Meta Muse Voice Transcribe.
 - Progressive Muse Spark text generation over server-sent events.
@@ -33,7 +43,7 @@ hear each completed sentence spoken by a locally hosted MMS-TTS model.
 - Reduced-motion support and responsive desktop/mobile layout.
 - Stop and voice-interruption controls. API credentials remain on the backend.
 
-## Architecture
+## 🧩 Architecture
 
 ```mermaid
 flowchart LR
@@ -53,7 +63,7 @@ flowchart LR
 Speech recognition and Muse Spark need internet access. Speech synthesis runs
 locally after the model is downloaded.
 
-## Requirements
+## 🛠️ Requirements
 
 - Windows 10/11, PowerShell, Git, and Python 3.12 (64-bit).
 - A current Chrome or Edge browser. `localhost` and `127.0.0.1` are secure
@@ -64,7 +74,7 @@ locally after the model is downloaded.
 - Optional NVIDIA GPU and matching CUDA-enabled PyTorch. CPU inference works
   but may be slower.
 
-## Install on Windows
+## 🚀 Install on Windows
 
 Run the clone command from any directory. Run the remaining commands from the
 new repository root in PowerShell:
@@ -90,7 +100,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .\.venv\Scripts\Activate.ps1
 ```
 
-## Configure Meta API access
+## 🔐 Configure Meta API access
 
 From the repository root, create a private `.env` only if one does not already
 exist, then edit it:
@@ -116,7 +126,7 @@ Restart the backend after changing `.env`. The key is used only by FastAPI and
 is never sent to frontend JavaScript or written to conversation logs. `.env`
 is ignored by Git; `.env.example` contains placeholders only.
 
-## Models and first launch
+## 🧠 Models and first launch
 
 The default voice uses the Hugging Face checkpoint `facebook/mms-tts-eng`.
 Transformers downloads and lazily initializes the model on the first TTS
@@ -125,7 +135,7 @@ request, then reuses it. The model weights are cached outside the repository.
 Muse Voice Transcribe (`muse-voice-transcribe-1.0`) and Muse Spark
 (`muse-spark-1.3`) are hosted Meta services, not local downloads.
 
-## Run Voice-Pilot
+## ▶️ Run Voice-Pilot
 
 From the repository root:
 
@@ -134,7 +144,7 @@ From the repository root:
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8002
 ```
 
-### One-command Windows startup
+### ⚡ One-command Windows startup
 
 After cloning, install or update `MODEL_API_KEY` in `.env`, then run:
 
@@ -162,7 +172,7 @@ start microphone capture. If the backend lacks a key or the upstream service
 rejects the connection, the actual server error is shown instead of a generic
 startup-race message.
 
-## Conversation history and privacy
+## 🗂️ Conversation history and privacy
 
 Each completed model-response turn is sent to a bounded in-process queue.
 One background worker writes turns in order to a unique session file under
@@ -180,7 +190,7 @@ Voice-Pilot sends microphone audio to Meta for transcription and conversation
 text to Muse Spark. Review your provider account's data retention and privacy
 terms before use.
 
-## Test the services
+## 🧪 Test the services
 
 From the repository root:
 
@@ -212,9 +222,9 @@ curl.exe -N http://127.0.0.1:8002/api/chat/stream `
 The endpoint returns SSE `delta` events followed by `done` when generation
 completes. This test exercises text streaming, not browser audio playback.
 
-## Troubleshooting
+## 🩺 Troubleshooting
 
-### Microphone does not start
+### 🎤 Microphone does not start
 
 - Use Chrome/Edge at `http://127.0.0.1:8002` and allow microphone access.
 - Check that the selected port is serving the current project/backend. An
@@ -226,14 +236,14 @@ completes. This test exercises text streaming, not browser audio playback.
   displays the backend's configuration or provider error if its connection
   fails.
 
-### Muse Spark does not answer
+### 💬 Muse Spark does not answer
 
 - Check `MODEL_API_KEY`, the configured model, network access to
   `https://api.meta.ai/v1/chat/completions`, and account model access.
 - Read the Uvicorn output for status and error type. Do not log or share
   authorization headers.
 
-### No audible speech
+### 🔊 No audible speech
 
 - Allow site audio, check system volume/output device, and press the microphone
   control again to resume the browser audio context.
@@ -241,7 +251,7 @@ completes. This test exercises text streaming, not browser audio playback.
 - First-use delays can come from downloading or loading MMS weights. CPU
   inference is slower. Check available disk and GPU memory.
 
-### CUDA or model download problems
+### ⚙️ CUDA or model download problems
 
 - Confirm CUDA availability with:
 
@@ -253,7 +263,7 @@ completes. This test exercises text streaming, not browser audio playback.
   inference. Close GPU-heavy applications if memory is low.
 - Check Hugging Face connectivity and disk space for the model cache.
 
-### Conversation logs are not appearing
+### 📝 Conversation logs are not appearing
 
 - Completed turns are queued asynchronously. Check the server output for a
   filesystem warning, confirm the repository folder is writable, and inspect
@@ -261,7 +271,7 @@ completes. This test exercises text streaming, not browser audio playback.
 - A full queue returns a clear error while leaving STT/chat/TTS available.
   Generated log files are private runtime data and must not be committed.
 
-## Project history
+## 🕰️ Project history
 
 Built from `git log` history (16 commits on `master`, oldest to newest).
 Regenerate with:
@@ -297,7 +307,7 @@ Commits (newest first):
 - `b7328bd` Improve Voice-Pilot spoken responses and avatar
 - `50bd7c7` Finalize Voice-Pilot streaming voice assistant (initial commit)
 
-## Licensing
+## ⚖️ Licensing
 
 This repository does not grant rights to the Meta APIs or model weights. Review
 Meta Model API terms, the MMS model card/license, and any optional model's

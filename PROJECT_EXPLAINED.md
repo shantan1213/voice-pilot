@@ -1,17 +1,19 @@
-# Voice-Pilot, Explained
+# 🎙️ Voice-Pilot, Explained
+
+> **Architecture at a glance:** browser audio → Meta transcription → streamed Muse Spark response → local MMS voice.
 
 This guide describes the code that is in the repository. Voice-Pilot uses a
 browser for the microphone, chat, face, and playback; FastAPI connects that
 browser to Meta's hosted STT/chat services and the local Python TTS model.
 
-## 1. What Voice-Pilot does
+## 1. 🎯 What Voice-Pilot does
 
 Voice-Pilot lets you ask questions aloud and hear the response. The app turns
 speech into text, asks Muse Spark for an answer, displays that answer as a
 compact chat bubble while it is generated, and speaks it using MMS-TTS. User
 and assistant messages are stored as private local text logs.
 
-## 2. Architecture
+## 2. 🧩 Architecture
 
 ```mermaid
 flowchart TD
@@ -64,7 +66,7 @@ sequenceDiagram
     Log->>Log: Append timestamped text to session file
 ```
 
-## 3. Complete request flow
+## 3. 🔄 Complete request flow
 
 1. A microphone click resumes the browser playback context and opens
    `/api/stt` as a WebSocket.
@@ -89,7 +91,7 @@ sequenceDiagram
    backend queues the record and immediately returns; a worker writes it to
    disk independently.
 
-## 4. FastAPI and the browser
+## 4. 🌐 FastAPI and the browser
 
 `app/main.py` starts the conversation-log worker with the FastAPI lifespan and
 exposes:
@@ -109,7 +111,7 @@ exposes:
 behavior. `static/app.js` handles the microphone, STT connection state, SSE
 parsing, response/TTS queues, playback, and background history persistence.
 
-## 5. Streaming speech recognition
+## 5. 🎤 Streaming speech recognition
 
 The browser sends mono 24 kHz PCM frames to FastAPI over `/api/stt`. FastAPI
 connects to `wss://api.meta.ai/v1/asr/realtime` using the server-side
@@ -122,7 +124,7 @@ starting microphone capture. Server configuration and provider error events
 are surfaced to the UI. Raw audio and interim transcript fragments are not
 written to history files.
 
-## 6. Muse Spark text streaming
+## 6. 💬 Muse Spark text streaming
 
 The browser sends finalized user text and bounded recent context to
 `POST /api/chat/stream`. FastAPI calls
@@ -136,7 +138,7 @@ duplicate a partial answer.
 The authorization header is constructed on the backend. Neither API
 credentials nor authorization headers are sent to JavaScript or logged.
 
-## 7. MMS-TTS and browser playback
+## 7. 🔊 MMS-TTS and browser playback
 
 `app/tts.py` lazily loads `facebook/mms-tts-eng` from the Hugging Face cache.
 FastAPI's synchronous `/api/tts` handler runs outside the async chat/STT event
@@ -148,7 +150,7 @@ sentence order and prevents overlapping speech. The speaking state and mouth
 animation follow playback timing approximately; they are not phoneme or
 waveform synchronized. Playback fades reduce clip-edge clicks.
 
-## 8. Face states
+## 8. 🙂 Face states
 
 JavaScript sets the SVG face's `data-state` as the app moves through idle,
 listening, thinking, speaking, success, and error. Two appearances both as Raala are selectable via `data-face`. CSS changes the halo,
@@ -158,7 +160,7 @@ face uses only inline SVG, CSS, and small CSS keyframe animations; the
 request it. Broad response keywords can also choose a visual mood color; that
 heuristic does not affect the synthesized voice.
 
-## 9. Background conversation logging
+## 9. 📝 Background conversation logging
 
 The browser creates one random session UUID per tab and one random turn UUID
 per finalized question. Once Muse Spark returns a complete answer, JavaScript
@@ -180,7 +182,7 @@ conversation text and do not stop the queue or voice APIs. The Clear History
 endpoint places a clear operation in the same queue, so earlier writes finish
 before saved files are removed.
 
-## 10. Files and folders
+## 10. 🗃️ Files and folders
 
 | Path | Purpose |
 |---|---|
@@ -197,7 +199,7 @@ before saved files are removed.
 | `.gitignore` | Excludes credentials, logs, generated audio and caches |
 | `conversation_logs/` | Generated private `.txt` history; ignored by Git |
 
-## 11. Environment variables and credentials
+## 11. 🔐 Environment variables and credentials
 
 Copy `.env.example` to `.env` in the project root and set:
 
@@ -211,7 +213,7 @@ editing `.env`. Never paste a real key into `static/`, documentation, logs, or
 a commit. `.env` is ignored; only the placeholder `.env.example` belongs in
 Git.
 
-## 12. Concurrency and the deadlock fix
+## 12. ⚡ Concurrency and the deadlock fix
 
 Muse Spark uses asynchronous HTTP streaming, so FastAPI can forward text while
 the upstream model is generating. TTS is a synchronous route, which FastAPI
@@ -227,7 +229,7 @@ Stop/interrupt actions abort active browser fetches and audio; an already
 running local inference can finish on the server after its browser request is
 canceled.
 
-## 13. Install, run, test, and troubleshoot
+## 13. 🛠️ Install, run, test, and troubleshoot
 
 From the project root in PowerShell:
 
@@ -269,7 +271,7 @@ Troubleshooting:
   Existing speech continues; inspect the server log without sharing private
   conversation files.
 
-## 14. Limitations and licensing
+## 14. ⚖️ Limitations and licensing
 
 Speech recognition and Muse Spark require Meta connectivity; audio and
 recognized questions are transmitted to the provider. TTS runs locally after
