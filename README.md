@@ -16,6 +16,7 @@ hear each completed sentence spoken by a locally hosted MMS-TTS model.
 - [Conversation history and privacy](#conversation-history-and-privacy)
 - [Test the services](#test-the-services)
 - [Troubleshooting](#troubleshooting)
+- [Project history](#project-history)
 - [Licensing](#licensing)
 
 ## Features
@@ -23,7 +24,7 @@ hear each completed sentence spoken by a locally hosted MMS-TTS model.
 - Realtime microphone transcription through Meta Muse Voice Transcribe.
 - Progressive Muse Spark text generation over server-sent events.
 - Local `facebook/mms-tts-eng` speech synthesis with sequential WAV playback.
-- A colorful, animated SVG face with idle, listening, thinking, speaking,
+- Two selectable faces — both as Raala — with idle, listening, thinking, speaking,
   success, and error states.
 - A focused voice interface without an on-screen chat transcript.
 - Completed turns saved as readable text files by a background writer, without
@@ -259,6 +260,42 @@ completes. This test exercises text streaming, not browser audio playback.
   `conversation_logs/`.
 - A full queue returns a clear error while leaving STT/chat/TTS available.
   Generated log files are private runtime data and must not be committed.
+
+## Project history
+
+Built from `git log` history (16 commits on `master`, oldest to newest).
+Regenerate with:
+
+```powershell
+git log --oneline --decorate
+```
+
+Early work finalized streaming voice assistance, then improved spoken
+responses and the avatar. The UI was redesigned around background history.
+Later work focused the interface on voice, prevented TTS feedback, and
+stabilized consecutive turns. Recent work reset history on startup, fixed
+the default port to 8002, kept STT ready between turns, improved startup
+latency, added one-command Windows startup, and removed Pocket TTS to
+leave streamlined MMS voice interactions.
+
+Commits (newest first):
+
+- `3daa5ca` Remove Pocket TTS support and streamline MMS voice interactions
+- `410980c` Add one-command Windows startup workflow
+- `6cda406` Improve voice response reliability and startup latency
+- `512ee31` Keep STT ready between voice turns
+- `cc4b159` Use port 8002 as default local app port
+- `a2cd7ab` Reset history on startup and limit context
+- `9a175d6` Restore fast multi-turn voice lifecycle
+- `289d632` Prevent STT restart race between voice turns
+- `47cb8bb` Keep selected voice status accurate
+- `d29e289` Stabilize consecutive voice turn lifecycle
+- `eb8914f` Fix Pocket voice playback handler scope
+- `73d8178` Add streaming Pocket TTS comparison mode
+- `e03b81b` Focus interface on voice and prevent TTS feedback
+- `b3e7c68` Redesign Voice-Pilot UI and add background history
+- `b7328bd` Improve Voice-Pilot spoken responses and avatar
+- `50bd7c7` Finalize Voice-Pilot streaming voice assistant (initial commit)
 
 ## Licensing
 

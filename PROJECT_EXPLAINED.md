@@ -151,7 +151,7 @@ waveform synchronized. Playback fades reduce clip-edge clicks.
 ## 8. Face states
 
 JavaScript sets the SVG face's `data-state` as the app moves through idle,
-listening, thinking, speaking, success, and error. CSS changes the halo,
+listening, thinking, speaking, success, and error. Two appearances both as Raala are selectable via `data-face`. CSS changes the halo,
 outline color, microphone ring, and mouth expression for those states. The
 face uses only inline SVG, CSS, and small CSS keyframe animations; the
 `prefers-reduced-motion` media query disables continuous motion for users who

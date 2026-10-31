@@ -8,6 +8,32 @@
   <link rel="stylesheet" href="/static/styles.css?v=12" />
 </head>
 <body>
+  <div class="bg-decor" aria-hidden="true">
+    <svg class="bg-field" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <path id="loopPath" d="M190.0 60.0C190.0 49.6 173.1 32.5 162.4 28.8C151.6 25.1 136.1 32.5 125.7 37.7C115.3 42.9 108.6 52.6 100.0 60.0C91.4 67.4 84.7 77.1 74.3 82.3C63.9 87.5 48.4 94.9 37.6 91.2C26.9 87.5 10.0 70.4 10.0 60.0C10.0 49.6 26.9 32.5 37.6 28.8C48.4 25.1 63.9 32.5 74.3 37.7C84.7 42.9 91.4 52.6 100.0 60.0C108.6 67.4 115.3 77.1 125.7 82.3C136.1 87.5 151.6 94.9 162.4 91.2C173.1 87.5 190.0 70.4 190.0 60.0Z" />
+        <path id="sparkPath" d="M0 -7 C1.5 -2 2 -1.5 7 0 C2 1.5 1.5 2 0 7 C-1.5 2 -2 1.5 -7 0 C-2 -1.5 -1.5 -2 0 -7 Z" />
+      </defs>
+      <g transform="translate(40,60) scale(2.2)">
+        <use href="#loopPath" class="drift-a loop-line" color="#df9f45" />
+      </g>
+      <g transform="translate(830,560) scale(2.6)">
+        <use href="#loopPath" class="drift-b loop-line" color="#9db4e8" />
+      </g>
+      <g fill="#df9f45">
+        <use href="#sparkPath" class="spark s1" transform="translate(180,140)" />
+        <use href="#sparkPath" class="spark s2" transform="translate(1050,120) scale(1.3)" />
+        <use href="#sparkPath" class="spark s3" transform="translate(980,660) scale(0.9)" />
+        <use href="#sparkPath" class="spark s4" transform="translate(150,620) scale(1.1)" />
+      </g>
+      <g fill="#9db4e8">
+        <use href="#sparkPath" class="spark s5" transform="translate(420,90) scale(0.8)" />
+        <use href="#sparkPath" class="spark s6" transform="translate(760,720)" />
+        <use href="#sparkPath" class="spark s7" transform="translate(60,400) scale(1.2)" />
+        <use href="#sparkPath" class="spark s8" transform="translate(1140,380) scale(0.9)" />
+      </g>
+    </svg>
+  </div>
   <main>
     <header class="topbar">
       <a class="brand" href="/" aria-label="Voice-Pilot home">
@@ -21,7 +47,7 @@
       <h1 id="app-name">Voice-Pilot</h1>
       <p id="agent-status" role="status" aria-live="polite" data-state="idle">Hello there! I'm Raala, your Voice-Pilot assistant. Tap the microphone and start speaking.</p>
 
-      <div id="avatar" class="avatar" data-state="idle" data-emotion="calm" role="img" aria-label="Voice-Pilot is idle">
+      <div id="avatar" class="avatar" data-state="idle" data-emotion="calm" data-face="desi" role="img" aria-label="Voice-Pilot is idle">
         <div class="avatar-halo"></div>
         <div class="avatar-orbit avatar-orbit-one" aria-hidden="true"></div>
         <div class="avatar-orbit avatar-orbit-two" aria-hidden="true"></div>
@@ -31,58 +57,94 @@
               <stop offset="0" stop-color="#f8fbff" />
               <stop offset="1" stop-color="#dfeaff" />
             </linearGradient>
-            <linearGradient id="cheekGradient" x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id="faceGradientWarm" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#f7e6c8" />
+            <stop offset="1" stop-color="#eecfa5" />
+          </linearGradient>
+          <linearGradient id="faceGradientBot" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#e2e9f2" />
+            <stop offset="1" stop-color="#bcc9db" />
+          </linearGradient>
+          <linearGradient id="cheekGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0" stop-color="#a7c3ff" stop-opacity=".85" />
               <stop offset="1" stop-color="#d7e5ff" stop-opacity=".2" />
             </linearGradient>
           </defs>
-          <path class="face-shape" d="M120 16c-48 0-84 34-84 88v27c0 52 35 91 84 91s84-39 84-91v-27c0-54-36-88-84-88Z" fill="url(#faceGradient)" />
-          <path class="face-shine" d="M61 79c11-28 33-43 59-43" fill="none" stroke="#fff" stroke-linecap="round" stroke-width="7" opacity=".8" />
-          <g class="hat" transform="rotate(-6 120 70)">
-            <ellipse cx="120" cy="80" rx="88" ry="15" fill="#c08a4e" stroke="#8a5a30" stroke-width="2.5" />
-            <path d="M78 80 C 78 48, 90 34, 106 34 C 112 34, 115 37, 120 37 C 125 37, 128 34, 134 34 C 150 34, 162 48, 162 80 Z" fill="#c08a4e" stroke="#8a5a30" stroke-width="2.5" />
-            <path d="M83 62 C 100 58, 140 58, 157 62 L157 73 C 140 69, 100 69, 83 73 Z" fill="#5d3f26" />
+          <path class="face-shape face-human" d="M120 58 C 78 58, 48 92, 48 138 C 48 188, 76 218, 120 230 C 164 218, 192 188, 192 138 C 192 92, 162 58, 120 58 Z" fill="url(#faceGradient)" />
+          <circle class="face-shape face-robo" cx="120" cy="142" r="80" fill="url(#faceGradientBot)" />
+          <path class="face-shine" d="M62 105 C 70 85, 85 72, 105 68" fill="none" stroke="#fff" stroke-linecap="round" stroke-width="7" opacity=".8" />
+          <g class="face-robo-deco">
+            <rect x="34" y="130" width="12" height="28" rx="6" fill="#8fa1b8" stroke="#6b7d94" stroke-width="2" />
+            <rect x="194" y="130" width="12" height="28" rx="6" fill="#8fa1b8" stroke="#6b7d94" stroke-width="2" />
+            <path d="M120 62 L120 38" stroke="#8fa1b8" stroke-width="5" stroke-linecap="round" />
+            <circle cx="120" cy="30" r="7" fill="#e05a4e" stroke="#b03a30" stroke-width="2" />
+            <circle cx="117.5" cy="27.5" r="2" fill="#ffffff" />
           </g>
-          <ellipse cx="70" cy="145" rx="20" ry="10" fill="url(#cheekGradient)" />
-          <ellipse cx="170" cy="145" rx="20" ry="10" fill="url(#cheekGradient)" />
+          <g class="hat" transform="rotate(-3 120 75)">
+            <ellipse cx="120" cy="88" rx="105" ry="14" fill="#c08a4e" stroke="#8a5a30" stroke-width="2.5" />
+            <path d="M72 88 C 72 50, 85 24, 110 20 C 115 18, 125 18, 130 20 C 155 24, 168 50, 168 88 Z" fill="#c08a4e" stroke="#8a5a30" stroke-width="2.5" />
+            <path d="M78 64 C 98 60, 142 60, 162 64 L162 76 C 142 72, 98 72, 78 76 Z" fill="#5d3f26" />
+          </g>
+          <g class="ears">
+            <ellipse class="ear ear-left" cx="42" cy="135" rx="14" ry="20" fill="#eecfa5" stroke="#c9a87a" stroke-width="2" />
+            <ellipse class="ear ear-right" cx="198" cy="135" rx="14" ry="20" fill="#eecfa5" stroke="#c9a87a" stroke-width="2" />
+            <ellipse cx="42" cy="135" rx="6" ry="9" fill="#d8b896" />
+            <ellipse cx="198" cy="135" rx="6" ry="9" fill="#d8b896" />
+          </g>
+          <ellipse cx="72" cy="152" rx="16" ry="8" fill="url(#cheekGradient)" />
+          <ellipse cx="168" cy="152" rx="16" ry="8" fill="url(#cheekGradient)" />
           <g class="eyes eye-default">
             <g class="eye">
-              <ellipse cx="83" cy="115" rx="13" ry="15" fill="#ffffff" />
-              <circle cx="83" cy="116" r="7" fill="#5478e8" />
-              <circle cx="83" cy="116" r="3.5" fill="#243653" />
-              <circle cx="80.5" cy="113.5" r="2" fill="#ffffff" />
+              <ellipse cx="90" cy="130" rx="11" ry="13" fill="#ffffff" />
+              <g class="iris-group">
+                <circle cx="90" cy="131" r="6" fill="#5478e8" />
+                <circle cx="90" cy="131" r="3" fill="#243653" />
+                <circle cx="87.5" cy="128.5" r="1.8" fill="#ffffff" />
+              </g>
             </g>
             <g class="eye">
-              <ellipse cx="157" cy="115" rx="13" ry="15" fill="#ffffff" />
-              <circle cx="157" cy="116" r="7" fill="#5478e8" />
-              <circle cx="157" cy="116" r="3.5" fill="#243653" />
-              <circle cx="154.5" cy="113.5" r="2" fill="#ffffff" />
+              <ellipse cx="150" cy="130" rx="11" ry="13" fill="#ffffff" />
+              <g class="iris-group">
+                <circle cx="150" cy="131" r="6" fill="#5478e8" />
+                <circle cx="150" cy="131" r="3" fill="#243653" />
+                <circle cx="147.5" cy="128.5" r="1.8" fill="#ffffff" />
+              </g>
             </g>
           </g>
           <g class="eyes eye-alt eye-wink">
-            <ellipse cx="83" cy="115" rx="13" ry="15" fill="#ffffff" />
-            <circle cx="83" cy="116" r="7" fill="#5478e8" />
-            <circle cx="83" cy="116" r="3.5" fill="#243653" />
-            <circle cx="80.5" cy="113.5" r="2" fill="#ffffff" />
-            <path d="M144 114 Q157 120 170 114" fill="none" stroke="#243653" stroke-width="4" stroke-linecap="round" />
+            <ellipse cx="90" cy="130" rx="11" ry="13" fill="#ffffff" />
+            <g class="iris-group">
+              <circle cx="90" cy="131" r="6" fill="#5478e8" />
+              <circle cx="90" cy="131" r="3" fill="#243653" />
+              <circle cx="87.5" cy="128.5" r="1.8" fill="#ffffff" />
+            </g>
+            <path d="M138 129 Q150 135 162 129" fill="none" stroke="#243653" stroke-width="4" stroke-linecap="round" />
           </g>
           <g class="eyes eye-alt eye-sleepy">
-            <path d="M70 114 Q83 121 96 114" fill="none" stroke="#243653" stroke-width="4" stroke-linecap="round" />
-            <path d="M144 114 Q157 121 170 114" fill="none" stroke="#243653" stroke-width="4" stroke-linecap="round" />
+            <path d="M79 129 Q90 136 101 129" fill="none" stroke="#243653" stroke-width="4" stroke-linecap="round" />
+            <path d="M139 129 Q150 136 161 129" fill="none" stroke="#243653" stroke-width="4" stroke-linecap="round" />
           </g>
-          <path class="mouth mouth-calm" d="M101 154c7 9 17 13 27 13s20-4 27-13" fill="none" stroke="#5978b4" stroke-linecap="round" stroke-width="5" />
-          <path class="mouth mouth-joyful" d="M100 151c8 12 18 17 28 17s20-5 28-17c-2 17-11 25-28 25s-26-8-28-25Z" fill="#5978b4" />
-          <path class="mouth mouth-caring" d="M103 160c8-6 16-9 25-9s17 3 25 9" fill="none" stroke="#5978b4" stroke-linecap="round" stroke-width="5" />
-          <path class="mouth mouth-curious" d="M108 159c5-3 10-4 15-4" fill="none" stroke="#5978b4" stroke-linecap="round" stroke-width="5" />
-          <path class="mouth mouth-success" d="M99 151c9 14 20 20 29 20s20-6 29-20c-2 19-12 29-29 29s-27-10-29-29Z" fill="#5978b4" />
-          <path class="mouth mouth-error" d="M103 165c8-7 16-10 25-10s17 3 25 10" fill="none" stroke="#d85d78" stroke-linecap="round" stroke-width="5" />
-          <path class="mustache mustache-left" d="M120 147 C 112 143, 102 143, 94 148" />
-          <path class="mustache mustache-right" d="M120 147 C 128 143, 138 143, 146 148" />
-          <path class="mouth mouth-playful" d="M99 159 C 111 165, 129 163, 141 151" fill="none" stroke="#5978b4" stroke-linecap="round" stroke-width="5" />
-          <ellipse class="mouth mouth-surprised" cx="120" cy="162" rx="9" ry="11" fill="#5978b4" />
-          <path class="mouth mouth-sleepy" d="M110 161 C 115 163, 125 163, 130 161" fill="none" stroke="#5978b4" stroke-linecap="round" stroke-width="4" />
-          <path class="mouth mouth-sad" d="M100 169 C 108 156, 132 156, 140 169" fill="none" stroke="#5978b4" stroke-linecap="round" stroke-width="5" />
-          <path d="M105 206c8 5 17 7 27 7s19-2 27-7" fill="none" stroke="#aac4f6" stroke-linecap="round" stroke-width="3" opacity=".8" />
+          <path class="mouth mouth-calm" d="M105 184 C 111 191, 129 191, 135 184" fill="none" stroke="#5978b4" stroke-linecap="round" stroke-width="5" />
+          <path class="mouth mouth-joyful" d="M102 182 C 107 194, 133 194, 138 182 C 132 186, 108 186, 102 182 Z" fill="#5978b4" />
+          <path class="mouth mouth-caring" d="M107 187 C 113 181, 127 181, 133 187" fill="none" stroke="#5978b4" stroke-linecap="round" stroke-width="5" />
+          <path class="mouth mouth-curious" d="M113 186 C 117 188, 123 188, 127 186" fill="none" stroke="#5978b4" stroke-linecap="round" stroke-width="5" />
+          <path class="mouth mouth-success" d="M99 182 C 104 196, 136 196, 141 182 C 135 187, 105 187, 99 182 Z" fill="#5978b4" />
+          <path class="mouth mouth-error" d="M105 192 C 111 184, 129 184, 135 192" fill="none" stroke="#d85d78" stroke-linecap="round" stroke-width="5" />
+          <path class="mustache mustache-big" d="M120 157 C 110 152, 96 153, 87 160 C 80 165, 79 172, 84 175 C 89 178, 95 175, 96 170 C 97 166, 100 164, 104 164 C 109 164, 115 163, 120 163 C 125 163, 131 164, 136 164 C 140 164, 143 166, 144 170 C 145 175, 151 178, 156 175 C 161 172, 160 165, 153 160 C 144 153, 130 152, 120 157 Z" />
+          <path class="beard" d="M58 102 C 46 130, 52 192, 80 216 C 98 230, 142 230, 160 216 C 188 192, 194 130, 182 102 C 182 145, 172 185, 150 202 C 134 215, 106 215, 90 202 C 68 185, 58 145, 58 102 Z" fill="#3e2212" />
+          <path d="M68 135 C 64 155, 72 182, 92 200 C 106 210, 134 210, 148 200 C 168 182, 176 155, 172 135" fill="none" stroke="#6b4423" stroke-width="1.2" opacity="0.35" stroke-linecap="round" />
+
+          <path class="mouth mouth-playful" d="M103 188 C 114 193, 129 191, 140 180" fill="none" stroke="#5978b4" stroke-linecap="round" stroke-width="5" />
+          <ellipse class="mouth mouth-surprised" cx="120" cy="188" rx="8" ry="9" fill="#5978b4" />
+          <path class="mouth mouth-sleepy" d="M113 188 C 117 189, 123 189, 127 188" fill="none" stroke="#5978b4" stroke-linecap="round" stroke-width="4" />
+          <path class="mouth mouth-sad" d="M104 193 C 111 183, 129 183, 136 193" fill="none" stroke="#5978b4" stroke-linecap="round" stroke-width="5" />
+          <path class="mouth mouth-angry" d="M108 183 L 132 183" fill="none" stroke="#d85d78" stroke-linecap="round" stroke-width="5" />
+          <path class="mouth mouth-excited" d="M98 178 C 104 196, 136 196, 142 178 L 142 182 C 132 188, 108 188, 98 182 Z" fill="#5978b4" />
+          <path class="mouth mouth-shy" d="M114 188 C 118 190, 122 190, 126 188" fill="none" stroke="#5978b4" stroke-linecap="round" stroke-width="4" />
+          <path class="mouth mouth-confused" d="M107 186 C 113 182, 119 190, 125 182 C 130 186, 134 182, 137 186" fill="none" stroke="#5978b4" stroke-linecap="round" stroke-width="4" />
+          <path class="mouth mouth-loving" d="M115 184 C 118 180, 122 180, 125 184 C 122 186, 118 186, 115 184 Z" fill="#e87a9a" stroke="#e87a9a" stroke-linecap="round" stroke-width="2" />
+          <ellipse class="mouth mouth-focused" cx="120" cy="186" rx="5" ry="7" fill="#5978b4" />
+          <path d="M106 211 C 113 215, 127 215, 134 211" fill="none" stroke="#aac4f6" stroke-linecap="round" stroke-width="3" opacity=".8" />
         </svg>
         <div class="sound-rings" aria-hidden="true"><i></i><i></i><i></i></div>
       </div>
@@ -92,6 +154,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2.5" width="6" height="12" rx="3"></rect><path d="M5.5 11.5v1a6.5 6.5 0 0 0 13 0v-1M12 19v3M9 22h6"></path></svg>
         </button>
         <button id="stop-response" class="interrupt-button" type="button" disabled>Stop response</button>
+      </div>
+      <div class="face-picker" role="group" aria-label="Choose face">
+        <button id="face-desi" class="face-button" type="button" aria-pressed="true" aria-label="Raala classic face" title="Raala"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><ellipse cx="12" cy="15" rx="9" ry="2.5" fill="currentColor"/><path d="M6 15 C6 10.5 7.8 7.2 10 6.6 C11 6.3 11.6 7.2 12 7.2 C12.4 7.2 13 6.3 14 6.6 C16.2 7.2 18 10.5 18 15 Z" fill="currentColor" stroke="rgba(0,0,0,.15)" stroke-width="0.6"/><path d="M7 11 C9 10.2 15 10.2 17 11 V12.5 C15 11.8 9 11.8 7 12.5 Z" fill="rgba(0,0,0,.25)"/></svg></button>
+        <button id="face-robo" class="face-button" type="button" aria-pressed="false" aria-label="Raala robot face" title="Raala"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="5" y="8" width="14" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="9" cy="13.5" r="1.6" fill="currentColor"/><circle cx="15" cy="13.5" r="1.6" fill="currentColor"/><path d="M12 8 L12 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="3.5" r="1.8" fill="currentColor"/></svg></button>
       </div>
       <div class="audio-indicator"><span id="audio-dot"></span><span id="audio-label">MMS English voice replies on</span><button id="enable-audio" class="enable-audio" type="button" hidden>Enable voice</button></div>
       <p id="error-message" class="error-message" role="alert" hidden></p>

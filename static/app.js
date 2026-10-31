@@ -7,6 +7,10 @@ const connectionLabel = document.getElementById("connection-label");
 const audioDot = document.getElementById("audio-dot");
 const audioLabel = document.getElementById("audio-label");
 const enableAudioButton = document.getElementById("enable-audio");
+const faceButtons = {
+  desi: document.getElementById("face-desi"),
+  robo: document.getElementById("face-robo"),
+};
 const errorMessage = document.getElementById("error-message");
 
 const STT_SAMPLE_RATE = 24000;
@@ -51,6 +55,26 @@ let welcomeIntroPlayed = false;
 let welcomeIntroBuffer = null;
 let welcomeIntroPromise = null;
 const WELCOME_INTRO = "Hello there! I am Raala, your Voice-Pilot assistant. Tap the microphone and start speaking.";
+
+function storedFace() {
+  try {
+    return localStorage.getItem("voicePilotFace") === "robo" ? "robo" : "desi";
+  } catch {
+    return "desi";
+  }
+}
+
+function setFace(name) {
+  const face = name === "robo" ? "robo" : "desi";
+  avatar.dataset.face = face;
+  faceButtons.desi.setAttribute("aria-pressed", String(face === "desi"));
+  faceButtons.robo.setAttribute("aria-pressed", String(face === "robo"));
+  try {
+    localStorage.setItem("voicePilotFace", face);
+  } catch {
+    // Private mode: keep the choice for this tab only.
+  }
+}
 
 function setAgentState(state, message) {
   avatar.dataset.state = state;
@@ -199,6 +223,18 @@ function setEmotion(text) {
     emotion = "sleepy";
   } else if (/\b(sad|crying|tears|lonely|heartbroken)\b/.test(content)) {
     emotion = "sad";
+  } else if (/\b(angry|mad|furious|annoyed|irritated|upset)\b/.test(content)) {
+    emotion = "angry";
+  } else if (/\b(excited|awesome|amazing|wonderful|fantastic|love it)\b/.test(content)) {
+    emotion = "excited";
+  } else if (/\b(shy|blush|embarrassed|awkward)\b/.test(content)) {
+    emotion = "shy";
+  } else if (/\b(confused|huh|what|puzzled|unsure|don.t understand)\b/.test(content)) {
+    emotion = "confused";
+  } else if (/\b(love|adore|darling|sweetheart|heart)\b/.test(content)) {
+    emotion = "loving";
+  } else if (/\b(focus|concentrate|careful|precisely|exactly)\b/.test(content)) {
+    emotion = "focused";
   } else if (/\?|\b(curiously|curious|wonder|what if)\b/.test(content)) {
     emotion = "curious";
   }
@@ -942,6 +978,10 @@ function handleSttEvent(event) {
       break;
   }
 }
+
+faceButtons.desi.addEventListener("click", () => setFace("desi"));
+faceButtons.robo.addEventListener("click", () => setFace("robo"));
+setFace(storedFace());
 
 microphoneButton.addEventListener("click", async () => {
   if (microphoneActive) {
