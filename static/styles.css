@@ -211,6 +211,63 @@ h1 {
   display: initial;
 }
 
+.mustache {
+  fill: none;
+  stroke: #4f6fad;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.eye-alt {
+  display: none;
+}
+
+.avatar[data-emotion="playful"] .eye-default,
+.avatar[data-emotion="sleepy"] .eye-default {
+  display: none;
+}
+
+.avatar[data-emotion="playful"] .eye-wink,
+.avatar[data-emotion="sleepy"] .eye-sleepy {
+  display: initial;
+}
+
+.avatar[data-emotion="playful"] .avatar-halo {
+  background: radial-gradient(circle, rgb(255 213 138 / 72%), rgb(255 230 190 / 10%) 70%);
+  box-shadow: 0 0 38px rgb(240 180 90 / 22%);
+}
+
+.avatar[data-emotion="playful"] .face-shape {
+  stroke: #eed3a6;
+}
+
+.avatar[data-emotion="surprised"] .avatar-halo {
+  background: radial-gradient(circle, rgb(170 216 255 / 68%), rgb(220 236 255 / 10%) 70%);
+  box-shadow: 0 0 38px rgb(110 170 240 / 22%);
+}
+
+.avatar[data-emotion="surprised"] .face-shape {
+  stroke: #b3d4f2;
+}
+
+.avatar[data-emotion="sleepy"] .avatar-halo {
+  background: radial-gradient(circle, rgb(190 198 216 / 45%), rgb(222 226 236 / 8%) 70%);
+  box-shadow: 0 0 30px rgb(140 150 175 / 15%);
+}
+
+.avatar[data-emotion="sleepy"] .face-shape {
+  stroke: #c3c9d8;
+}
+
+.avatar[data-emotion="sad"] .avatar-halo {
+  background: radial-gradient(circle, rgb(170 200 245 / 62%), rgb(222 232 250 / 10%) 70%);
+  box-shadow: 0 0 38px rgb(120 150 220 / 20%);
+}
+
+.avatar[data-emotion="sad"] .face-shape {
+  stroke: #b9cdf0;
+}
+
 .sound-rings {
   position: absolute;
   inset: 0;
@@ -437,13 +494,21 @@ footer {
 
 .avatar[data-emotion="joyful"] .mouth-calm,
 .avatar[data-emotion="caring"] .mouth-calm,
-.avatar[data-emotion="curious"] .mouth-calm {
+.avatar[data-emotion="curious"] .mouth-calm,
+.avatar[data-emotion="playful"] .mouth-calm,
+.avatar[data-emotion="surprised"] .mouth-calm,
+.avatar[data-emotion="sleepy"] .mouth-calm,
+.avatar[data-emotion="sad"] .mouth-calm {
   display: none;
 }
 
 .avatar[data-emotion="joyful"] .mouth-joyful,
 .avatar[data-emotion="caring"] .mouth-caring,
-.avatar[data-emotion="curious"] .mouth-curious {
+.avatar[data-emotion="curious"] .mouth-curious,
+.avatar[data-emotion="playful"] .mouth-playful,
+.avatar[data-emotion="surprised"] .mouth-surprised,
+.avatar[data-emotion="sleepy"] .mouth-sleepy,
+.avatar[data-emotion="sad"] .mouth-sad {
   display: initial;
 }
 
@@ -467,7 +532,11 @@ footer {
 
 .avatar[data-emotion="joyful"][data-state="speaking"] .mouth-joyful,
 .avatar[data-emotion="caring"][data-state="speaking"] .mouth-caring,
-.avatar[data-emotion="curious"][data-state="speaking"] .mouth-curious {
+.avatar[data-emotion="curious"][data-state="speaking"] .mouth-curious,
+.avatar[data-emotion="playful"][data-state="speaking"] .mouth-playful,
+.avatar[data-emotion="surprised"][data-state="speaking"] .mouth-surprised,
+.avatar[data-emotion="sleepy"][data-state="speaking"] .mouth-sleepy,
+.avatar[data-emotion="sad"][data-state="speaking"] .mouth-sad {
   animation: talking 210ms ease-in-out infinite alternate;
 }
 
