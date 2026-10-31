@@ -237,6 +237,36 @@ class ChatStreamTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(response.closed)
 
 
+class SharedChatClientTests(unittest.IsolatedAsyncioTestCase):
+    async def test_reuses_shared_client_without_closing_it(self):
+        response = FakeResponse(
+            [
+                'data: {"choices":[{"delta":{"content":"Shared hello"},"finish_reason":"stop"}]}',
+                "",
+                "data: [DONE]",
+                "",
+            ]
+        )
+        shared = FakeClient(response)
+        previous = main._chat_client
+        main._chat_client = shared
+        try:
+            events = [
+                json.loads(event.removeprefix("data: ").strip())
+                async for event in main._stream_muse_chat(
+                    [{"role": "user", "content": "Hi"}], "secret-test-key"
+                )
+            ]
+        finally:
+            main._chat_client = previous
+        self.assertEqual(
+            events,
+            [{"type": "delta", "text": "Shared hello"}, {"type": "done"}],
+        )
+        self.assertIsNotNone(shared.request_args)
+        self.assertTrue(response.closed)
+
+
 class ChatEndpointTests(unittest.TestCase):
     def test_endpoint_streams_events_and_adds_server_instruction(self):
         captured_messages = None

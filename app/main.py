@@ -44,14 +44,16 @@ CHAT_TIMEOUT = httpx.Timeout(connect=10, read=90, write=20, pool=10)
 CONVERSATION_LOG_DIR = BASE_DIR / "conversation_logs"
 conversation_logs = ConversationLogWorker(CONVERSATION_LOG_DIR)
 tts_warmup_task: asyncio.Task[None] | None = None
+_chat_client: httpx.AsyncClient | None = None
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    global tts_warmup_task
+    global tts_warmup_task, _chat_client
 
     await conversation_logs.start()
     await conversation_logs.clear()
+    _chat_client = httpx.AsyncClient(timeout=CHAT_TIMEOUT)
     from app.tts import warm_mms_model
 
     async def warm_tts_in_background() -> None:
@@ -68,7 +70,29 @@ async def lifespan(_app: FastAPI):
             tts_warmup_task.cancel()
             await asyncio.gather(tts_warmup_task, return_exceptions=True)
         tts_warmup_task = None
+        if _chat_client is not None:
+            try:
+                await _chat_client.aclose()
+            except Exception:
+                logger.warning("Could not close the shared Muse Spark client.")
+            _chat_client = None
         await conversation_logs.stop()
+
+
+@asynccontextmanager
+async def _chat_client_context():
+    """Yield the shared chat client, or a fresh one when lifespan is inactive.
+
+    Sharing one client across turns reuses connections and removes TLS plus
+    pool setup from the latency path. Tests calling the streamer without
+    lifespan still get a fresh patched client.
+    """
+    shared = _chat_client
+    if shared is not None:
+        yield shared
+        return
+    async with httpx.AsyncClient(timeout=CHAT_TIMEOUT) as fresh:
+        yield fresh
 
 
 app = FastAPI(title="Voice-Pilot", version="1.0.0", lifespan=lifespan)
@@ -150,7 +174,7 @@ async def _stream_muse_chat(messages: list[dict[str, str]], api_key: str) -> Asy
         empty_choices = 0
 
         try:
-            async with httpx.AsyncClient(timeout=CHAT_TIMEOUT) as client:
+            async with _chat_client_context() as client:
                 async with client.stream(
                     "POST",
                     CHAT_COMPLETIONS_URL,

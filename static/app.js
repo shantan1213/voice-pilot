@@ -446,7 +446,8 @@ function extractSentences(text) {
     remainder = remainder.slice(end);
     match = boundary.exec(remainder);
   }
-  if (remainder.length > 160) {
+  const firstChunk = sentences.length === 0;
+  if (remainder.length > (firstChunk ? 120 : 160)) {
     const comma = remainder.lastIndexOf(", ", 160);
     if (comma > 40) {
       sentences.push(remainder.slice(0, comma + 1).trim());
@@ -715,6 +716,10 @@ async function startMicrophone() {
   sttCloseReason = null;
   firstAudioCapturedAt = null;
 
+  // Parallel mic startup: permission plus device setup overlaps the STT handshake.
+  const micPromise = navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  micPromise.catch(() => {});
+  micPromise.then((stream) => { if (sttSocket !== socket) { stream.getTracks().forEach((track) => track.stop()); } else { microphoneStream = stream; } }, () => {});
   const websocketProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   const socket = new WebSocket(`${websocketProtocol}//${window.location.host}/api/stt`);
   sttSocket = socket;
@@ -806,8 +811,9 @@ async function startMicrophone() {
     sttReadyReject = null;
   }
 
-  microphoneStream = await navigator.mediaDevices.getUserMedia({
-    audio: {
+  try { microphoneStream = await micPromise; } catch (micError) { closeSttSocket(); throw micError instanceof Error ? micError : new Error("Could not start microphone."); }
+  // Legacy inline mic request moved above for parallel startup; no-op.
+  void ({ audio: {
       channelCount: 1,
       echoCancellation: true,
       noiseSuppression: true,
