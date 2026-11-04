@@ -4,7 +4,7 @@ These are the contracts enforced by the current validators and relay code.
 
 ## 💬 Chat SSE
 
-Request content type is JSON. `messages` has 1-40 entries; each role is `user` or `assistant`, and content is 1-8,000 characters. The stream uses blank-line-delimited SSE frames:
+Request content type is JSON. `messages` has 1-40 entries; each role is `user` or `assistant`, and content is 1-8,000 characters. An optional `session_id` string scopes write confirmations (event, email, task) to the browser tab. The stream uses blank-line-delimited SSE frames. The twelve agent actions and their argument shapes are enumerated in [21 Gmail + Tasks tools](21-gmail-tasks-agent-tools.md) and [20 Calendar agent tool](20-google-calendar-agent-tool.md).
 
 ```text
 data: {"type":"delta","text":"Hello "}

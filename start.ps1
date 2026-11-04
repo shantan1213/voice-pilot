@@ -103,12 +103,43 @@ if ($null -ne $existing) {
     try {
         $health = Invoke-WebRequest -UseBasicParsing "$baseUrl/api/health" -TimeoutSec 5
         if ($health.StatusCode -eq 200) {
-            Write-Host "Voice-Pilot is already running at $baseUrl"
-            Write-Host "Health: $($health.Content)"
-            exit 0
+            Write-Host "Port $Port is in use. Stopping the previous Voice-Pilot server first..."
+            Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" -ErrorAction SilentlyContinue |
+                Where-Object { $_.CommandLine -match "uvicorn" -and $_.CommandLine -match "app\.main" } |
+                ForEach-Object {
+                    try {
+                        Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop
+                        Write-Host "Stopped previous server (PID $($_.ProcessId))."
+                    } catch {
+                        Write-Host "Could not stop PID $($_.ProcessId): $($_.Exception.Message)"
+                    }
+                }
+            for ($wait = 1; $wait -le 15; $wait++) {
+                Start-Sleep -Seconds 1
+                $busy = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+                if ($null -eq $busy) { break }
+            }
         }
     } catch {
-        Stop-WithError "Port $Port is occupied by an unhealthy process. Stop it and rerun."
+        Write-Host "Health check failed; stopping whatever holds the port."
+        Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" -ErrorAction SilentlyContinue |
+            Where-Object { $_.CommandLine -match "uvicorn" -and $_.CommandLine -match "app\.main" } |
+            ForEach-Object {
+                try { Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop } catch {}
+            }
+        for ($wait = 1; $wait -le 15; $wait++) {
+            Start-Sleep -Seconds 1
+            $busy = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+            if ($null -eq $busy) { break }
+        }
+    }
+    $stillThere = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    if ($null -ne $stillThere) {
+        Stop-WithError "Port $Port is still occupied. Stop that process and rerun."
+    }
+    # Fall through to a fresh start below.
+    if ($null -eq $stillThere) {
+        Write-Host "Port $Port is free. Starting fresh..."
     }
 }
 

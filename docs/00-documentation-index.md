@@ -29,7 +29,9 @@ This set documents the implementation currently in this repository. Read in nume
 | [17 Errors and debugging](17-error-handling-and-debugging.md) | Failure behavior and diagnosis |
 | [18 Development guide](18-development-and-extension-guide.md) | Safe extension workflow |
 | [19 Glossary](19-glossary.md) | Terms used throughout |
+| [20 Calendar agent tool](20-google-calendar-agent-tool.md) | Raala's Google Calendar actions, confirmation, and OAuth |
+| [21 Gmail + Tasks tools](21-gmail-tasks-agent-tools.md) | Send-only Gmail and Tasks CRUD-lite, incremental auth |
 
 ## Source of truth
 
-The implementation is in [`app/main.py`](../app/main.py), [`app/tts.py`](../app/tts.py), [`app/conversation_logs.py`](../app/conversation_logs.py), [`app/settings.py`](../app/settings.py), [`app/routers/`](../app/routers/), and [`static/app.js`](../static/app.js). Generated `conversation_logs/` data is runtime state, not documentation. When behavior differs from prose, verify the source and update the relevant page.
+The implementation is in [`app/main.py`](../app/main.py), [`app/tts.py`](../app/tts.py), [`app/conversation_logs.py`](../app/conversation_logs.py), [`app/settings.py`](../app/settings.py), [`app/routers/`](../app/routers/), [`app/agent/`](../app/agent/), [`app/integrations/`](../app/integrations/), and [`static/app.js`](../static/app.js). Generated `conversation_logs/` data is runtime state, not documentation. When behavior differs from prose, verify the source and update the relevant page.

@@ -14,5 +14,11 @@
 - **Turn ID:** UUID identifying one completed user/assistant exchange for deduplication.
 - **Warm-up:** Background MMS model loading during application startup.
 - **WebSocket relay:** The backend forwards browser frames/events between the client and Meta ASR without persisting audio.
+- **Agent tool:** A registered, validated backend action the LLM can request but never execute directly.
+- **Action selection:** The keyword-prefiltered, non-streaming Muse Spark call that maps a message to at most one registered action.
+- **Pending confirmation:** The exact proposed event stored per `session_id` until the user says "confirm" or it expires.
+- **Tool registry:** The allow-list of executable actions; unregistered names are rejected as unsupported.
+- **Send-only Gmail:** The granted `gmail.send` scope permits sending only; inbox reading is impossible by construction.
+- **Task list:** A named collection in Google Tasks; `@default` is the user's default list.
 
 For implementation details, use the cross-links in the [documentation index](00-documentation-index.md).

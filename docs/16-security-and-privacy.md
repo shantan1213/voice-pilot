@@ -6,7 +6,7 @@ The app is designed for local development, not as a hardened public service. By 
 
 `MODEL_API_KEY` is read server-side and sent as a bearer credential to Meta. It is not embedded in `static/app.js`, returned in API responses, or written to conversation logs. Error logging records exception types and bounded provider messages; inspect logs before sharing them because provider messages may contain account details.
 
-Microphone audio is relayed to Meta ASR. User/assistant text is sent to Muse Spark. Completed text is written locally under `conversation_logs/`; startup clears prior session files. Raw audio, interim transcripts, tokens, and API keys are not persisted by the application. Provider retention and account terms still apply.
+Microphone audio is relayed to Meta ASR. User/assistant text is sent to Muse Spark. Completed text is written locally under `conversation_logs/`; startup clears prior session files. Raw audio, interim transcripts, provider access tokens, and API keys are not persisted by the application. The only persisted credential is the Google OAuth refresh token in gitignored `secrets/google_tokens.json` (best-effort 0600), covering Calendar, Gmail send, and Tasks grants. The agent modules persist nothing themselves; the standard turn history (`user`/`assistant` text via `/api/history/turn`) is unchanged, so avoid dictating secrets into it. Provider retention and account terms still apply.
 
 Input controls include Pydantic lengths, UUID parsing, accepted roles/models, PCM frame/session limits, and bounded queue capacity. TTS uses in-memory bytes. Log readers skip symlinks and malformed records.
 

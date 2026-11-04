@@ -32,6 +32,15 @@ def is_model_ready() -> bool:
     return _model is not None and _tokenizer is not None
 
 
+def device_name() -> str:
+    """Name of the device the model runs on (reports only, never loads)."""
+    if _model is None:
+        return "not loaded"
+    if _device is not None:
+        return str(_device)
+    return "unknown"
+
+
 def synthesize_to_bytes(text: str, model_name: Literal["mms"] = "mms") -> bytes:
     """Synthesize text to WAV bytes in memory without touching the filesystem."""
     if not isinstance(text, str):

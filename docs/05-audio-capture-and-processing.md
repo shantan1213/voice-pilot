@@ -16,4 +16,6 @@ flowchart TD
   R --> X[transcript events]
 ```
 
+A microphone picker under the controls lists every `audioinput` device, remembers the choice in `localStorage` (`raala-mic-id`), and passes it as an exact `deviceId` constraint; a headset that is not the OS default is therefore selectable, with fallback to the default mic plus an error if the chosen device disappears. A live level bar shows capture RMS, and 8 s of near-silence while listening surfaces a "can't hear anything" hint.
+
 Capture should be stopped or muted while TTS plays. This is a browser feedback concern, not a server-side audio filter. The backend does not persist raw audio or interim text. Source: [`stt()`](../app/main.py), [`static/app.js`](../static/app.js), and constants near the top of `main.py`.

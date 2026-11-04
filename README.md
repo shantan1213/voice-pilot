@@ -5,15 +5,28 @@
 [![FastAPI](https://img.shields.io/badge/API-FastAPI-009688?logo=fastapi&logoColor=white)](app/main.py)
 [![Docs](https://img.shields.io/badge/docs-source--verified-8B5CF6)](docs/00-documentation-index.md)
 
+> 🏆 Built for the [Meta Global AI Developer Hackathon 2026](https://dev.meta.ai/events/global-hackathon) (Meta + Cerebral Valley) — Raala, a voice-first AI receptionist that schedules meetings for you.
+
 > **Raala speaks. You listen.** A local-first voice assistant with a colorful animated interface, realtime transcription, streaming answers, and local speech synthesis.
 
 Voice-Pilot is a local-first voice assistant for Windows. Speak into your
 browser, follow the assistant's reply as it streams into a compact chat, and
 hear each completed sentence spoken by a locally hosted MMS-TTS model.
 
+## 🎬 Demo video
+
+> **To add the demo:** save your recording as `docs/demo.mp4` in this repo —
+> it plays right here on GitHub, no code changes needed.
+
+![Raala demo — schedule a meeting by voice](docs/demo.mp4)
+
 ## 🧭 Table of contents
 
+- [Demo video](#-demo-video)
 - [Features](#features)
+- [Built with Meta](#-built-with-meta)
+- [Future goals](#-future-goals)
+- [Screenshots](#screenshots)
 - [Architecture](#architecture)
 - [Requirements](#requirements)
 - [Install on Windows](#install-on-windows)
@@ -36,12 +49,64 @@ hear each completed sentence spoken by a locally hosted MMS-TTS model.
 - Local `facebook/mms-tts-eng` speech synthesis with sequential WAV playback.
 - Two selectable faces — both as Raala — with idle, listening, thinking, speaking,
   success, and error states.
-- A focused voice interface without an on-screen chat transcript.
+- Chat mode: typing opens a half-screen chat thread — face on one side,
+  live user/assistant bubbles on the other — while pure-voice use stays
+  transcript-free.
 - Completed turns saved as readable text files by a background writer, without
   waiting on disk I/O in the STT, chat, or TTS path.
 - Unique session files and turn IDs prevent duplicate log entries.
 - Reduced-motion support and responsive desktop/mobile layout.
 - Stop and voice-interruption controls. API credentials remain on the backend.
+- Raala is a meeting scheduler: say "schedule a meeting" for tomorrow's
+  free hourly slots (9 AM-7 PM) with the exact date and timezone, tap or speak
+  a time, then complete the short form. See
+  [the Calendar tool doc](docs/20-google-calendar-agent-tool.md).
+- Bookings recheck the slot before creating, mint a booking ID, log internally
+  (optional Google Sheet), and send the HTML confirmation in the background.
+- A simple dashboard lists every booking with its status, cancels meetings
+  (freeing the slot and deleting the Calendar event), and links the Sheet.
+
+## 🧩 Built with Meta
+
+Every AI step in the voice loop is Meta technology:
+
+| Layer | Meta tech | Model / endpoint |
+|---|---|---|
+| Speech-to-text | Meta Muse Voice Transcribe | `muse-voice-transcribe-1.0` over realtime WebSocket (`wss://api.meta.ai/v1/asr/realtime`) |
+| Conversation | Meta Muse Spark | `muse-spark-1.3` via chat completions (`https://api.meta.ai/v1/chat/completions`), streamed as SSE deltas |
+| Speech synthesis | Meta MMS open weights | `facebook/mms-tts-eng`, run locally — no audio leaves the machine for TTS |
+
+Google Calendar/Gmail are used only as the meeting backend (create events, send confirmations, optional Sheets log).
+
+## 🎯 Future goals
+
+- Understand natural time phrases ("after lunch", "Friday evening") and show several days at once.
+- Attach real Google Meet links to booked events.
+- Reschedule and cancel by voice, plus reminders before meetings.
+- Faster cold start and an installable offline-first shell.
+- Per-user preferences and history that persist across restarts.
+
+## 📸 Screenshots
+
+Save the app screenshots as `docs/screenshots/01-landing.png`,
+`docs/screenshots/02-chat-booking.png`, `docs/screenshots/03-avatar.png`,
+`docs/screenshots/04-meeting-form.png`, and `docs/screenshots/05-dashboard.png`
+— they render below once the files are in place.
+
+![Raala landing screen with Start, microphone, and chat input](docs/screenshots/01-landing.png)
+*Landing — Start, tap-to-talk mic, and Chat mode input.*
+
+![Chat mode booking a meeting with slot, save, and done steps](docs/screenshots/02-chat-booking.png)
+*Chat mode — live bubbles plus the Slot → Save → Done booking stepper.*
+
+![Raala avatar speaking](docs/screenshots/03-avatar.png)
+*Raala speaking — animated states for idle, listening, thinking, and speaking.*
+
+![Meeting form with available slot cards](docs/screenshots/04-meeting-form.png)
+*Booking — live slot cards plus the short animated form (name, email, time, topic, type).*
+
+![Meeting dashboard with bookings and sheet link](docs/screenshots/05-dashboard.png)
+*Dashboard — every booking with its status flags, cancel buttons, and the Google Sheet link.*
 
 ## 🧩 Architecture
 

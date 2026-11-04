@@ -9,6 +9,7 @@ Run from the repository root with Python 3.12 and the existing virtual environme
 - Change persistence in `app/conversation_logs.py`; retain idempotency, bounded enqueue, snapshot reads, and orderly clear.
 - Change interaction in `static/app.js` and keep UI states, cancellation, audio sequencing, and accessibility attributes coherent.
 - If modularizing routes, explicitly call `app.include_router(...)` and reconcile duplicate decorators; currently extracted routers are inactive.
+- Gmail and Tasks followed this recipe exactly (`gmail.py`, `tasks.py`, `register_*_tools`, mirrored tests, `docs/21-gmail-tasks-agent-tools.md`). To add Sheets next: same steps, request the Sheets scope in `oauth.py`, and document it. Never add dummy registrations or touch the voice pipeline.
 
 ```mermaid
 flowchart TD

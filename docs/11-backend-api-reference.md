@@ -13,6 +13,12 @@ Routes below are implemented directly in [`app/main.py`](../app/main.py). Extrac
 | `GET /api/history` | none | `{turns:[...]}` snapshot |
 | `POST /api/history/turn` | UUID `session_id`, UUID `turn_id`, nonempty user/assistant | `202 {status}`; 503 if queue full |
 | `DELETE /api/history` | none | `204`; 500/503 on clear failure |
+| `GET /auth/google/login` | none | `307` redirect to Google; 503 when unconfigured |
+| `GET /auth/google/callback` | `code`, `state` query | success HTML; 400/502 on state, code, or exchange failure |
+| `GET /api/google/status` | none | `{connected, configured}`; no token data |
+| `POST /api/google/disconnect` | none | `{connected:false}`; clears stored token |
+
+Login requests Calendar, Gmail send, and Tasks scopes together with `include_granted_scopes=true`, so re-running login adds new grants while preserving old ones. A pre-existing Calendar-only grant keeps working; Gmail/Tasks calls then answer with a reconnect prompt until re-authorized.
 
 Chat returns 503 without an API key, 413 over total context, and validates message counts/content through Pydantic. TTS strips text and limits it to 1,000 characters.
 

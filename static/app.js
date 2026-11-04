@@ -11,7 +11,11 @@ const faceButtons = {
   desi: document.getElementById("face-desi"),
   robo: document.getElementById("face-robo"),
 };
-const errorMessage = document.getElementById("error-message");
+const errorMessage = document.getElementById("error-message"); const actionLine = document.getElementById("action-line");
+const typeForm = document.getElementById("type-box");
+const typeInput = document.getElementById("type-input");
+const micSelect = document.getElementById("mic-select");
+const micLevelBar = document.querySelector("#mic-level i");
 
 const STT_SAMPLE_RATE = 24000;
 const STT_SESSION_LIMIT_MS = 10 * 60 * 1000;
@@ -27,6 +31,11 @@ let audioProcessor = null;
 let silenceGain = null;
 let sessionLimitTimer = null;
 let microphoneActive = false;
+const MIC_STORAGE_KEY = "raala-mic-id";
+let micAnalyser = null;
+let micLevelTimer = null;
+let micPeakLevel = 0;
+let micSilentHintShown = false;
 let sttHadError = false;
 let generatedResponse = "";
 const chatHistory = [];
@@ -37,7 +46,7 @@ let speechQueue = Promise.resolve();
 let speechRunId = 0;
 let activeAudioSource = null;
 const activeStreamingSources = new Set();
-let activeTtsController = null;
+let activeTtsController = null; const ttsPrefetchCache = new Map(); function prefetchTts(text, runId) { if (!text || text.length > 1000 || !audioEnabled || runId !== speechRunId || ttsPrefetchCache.has(text)) return; ttsPrefetchCache.set(text, fetch("/api/tts", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({text: text, model: "mms"})}).then((r) => { if (!r.ok) throw 0; return r.arrayBuffer(); }).then((buf) => (buf && buf.byteLength > 44 ? buf : null)).catch(() => null)); if (ttsPrefetchCache.size > 4) ttsPrefetchCache.delete(ttsPrefetchCache.keys().next().value); } function fetchTtsCached(url, options) { try { const key = JSON.parse(options.body).text; const hit = ttsPrefetchCache.get(key); if (hit) { ttsPrefetchCache.delete(key); return hit.then((buf) => { if (!buf) throw 0; return {ok: true, status: 200, headers: {get: () => "audio/wav"}, arrayBuffer: async () => buf}; }); } } catch (e) {} return fetch(url, options); }
 let responseInProgress = false;
 let audioEnabled = false;
 let sttReadyResolve = null;
@@ -54,7 +63,7 @@ let activeTurnMetrics = null;
 let welcomeIntroPlayed = false;
 let welcomeIntroBuffer = null;
 let welcomeIntroPromise = null;
-const WELCOME_INTRO = "Hello there! I am Raala, your Voice-Pilot assistant. Tap the microphone and start speaking.";
+const WELCOME_INTRO = "Hello! I am Raala, your receptionist. I am here to schedule meetings for you — say the word and consider it done. For instance, I can set up your meeting with Mark Zuckerberg tomorrow. Just tap the microphone and tell me when you would like to meet.";
 
 function storedFace() {
   try {
@@ -76,11 +85,11 @@ function setFace(name) {
   }
 }
 
-function setAgentState(state, message) {
+function setAgentState(state, message, keepCurrentText) {
   avatar.dataset.state = state;
   avatar.setAttribute("aria-label", `Voice-Pilot is ${state}`);
   agentStatus.dataset.state = state;
-  agentStatus.textContent = message;
+  agentStatus.textContent = keepCurrentText ? agentStatus.textContent : message;
   connectionDot.dataset.state = state === "error"
     ? "error"
     : microphoneActive || state === "connecting" ? "connected" : "idle";
@@ -95,7 +104,7 @@ function logTurnMetrics(metrics) {
   const duration = (start, end) => start != null && end != null ? Math.round(end - start) : null;
   console.info("Voice turn latency", {
     firstAudioCapturedMs: duration(metrics.firstAudioCapturedAt, metrics.finalTranscriptAt),
-    transcriptToFirstTextMs: duration(metrics.finalTranscriptAt, metrics.firstTextChunkAt),
+    serverMs: metrics.serverMs || null, transcriptToFirstTextMs: duration(metrics.finalTranscriptAt, metrics.firstTextChunkAt),
     firstTextToTtsMs: duration(metrics.firstTextChunkAt, metrics.ttsStartedAt),
     ttsToFirstAudioMs: duration(metrics.ttsStartedAt, metrics.firstAudioPlayableAt),
     playbackMs: duration(metrics.firstAudioPlayableAt, metrics.playbackCompletedAt),
@@ -307,7 +316,7 @@ function preloadWelcomeIntro() {
 }
 
 async function playWelcomeIntro() {
-  if (welcomeIntroPlayed || !audioEnabled || !playbackContext || !welcomeIntroBuffer) {
+  if (welcomeIntroPlayed || !audioEnabled || !playbackContext || !welcomeIntroBuffer || responseInProgress || responseQueueRunning) {
     return;
   }
   welcomeIntroPlayed = true;
@@ -327,6 +336,7 @@ async function playWelcomeIntro() {
 }
 
 function stopMicrophone() {
+  stopMicLevelLoop();
   if (audioProcessor) {
     audioProcessor.disconnect();
     audioProcessor.onaudioprocess = null;
@@ -356,6 +366,27 @@ function hasPendingTurn() {
   return responseInProgress || responseQueueRunning || responseQueue.length > 0;
 }
 
+function stopListeningForResponse() {
+  listeningRequested = false;
+  sttCloseReason = "turn"; listeningRequested = true;
+  window.clearTimeout(sessionLimitTimer);
+  stopMicrophone();
+  microphoneActive = false;
+  microphoneButton.classList.remove("active");
+  microphoneButton.setAttribute("aria-pressed", "false");
+  microphoneButton.setAttribute("aria-label", "Start listening");
+  microphoneButton.title = "Start listening";
+  if (sttSocket?.readyState === WebSocket.OPEN) {
+    try {
+      sttSocket.send(JSON.stringify({ type: "stop" }));
+    } catch (error) {
+      if (!(error instanceof DOMException)) {
+        throw error;
+      }
+    }
+  }
+}
+
 async function playAudioBuffer(buffer, runId) {
   if (!playbackContext || runId !== speechRunId) {
     return Promise.resolve();
@@ -376,7 +407,7 @@ async function playAudioBuffer(buffer, runId) {
   gain.gain.linearRampToValueAtTime(0, playbackContext.currentTime + buffer.duration);
   source.connect(gain);
   gain.connect(playbackContext.destination);
-  activeAudioSource = source;
+  if (activeAudioSource && activeAudioSource !== source) { try { activeAudioSource.stop(); } catch (e) {} } activeAudioSource = source;
   if (activeTurnMetrics && activeTurnMetrics.firstAudioPlayableAt == null) {
     activeTurnMetrics.firstAudioPlayableAt = performance.now();
   }
@@ -426,7 +457,7 @@ function queueSpeech(sentence, runId) {
       agentStatus.textContent = "Preparing voice";
 
       try {
-        const ttsResponse = await fetch("/api/tts", {
+        const ttsResponse = await fetchTtsCached("/api/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text, model: "mms" }),
@@ -544,15 +575,16 @@ async function readMuseStream(streamResponse, runId) {
         activeTurnMetrics.firstTextChunkAt = performance.now();
       }
       generatedResponse = generatedText;
-      speechRemainder += event.text;
+      appendAssistantDelta(runId, event.text);
+      speechRemainder += event.text; { const speakingNow = cleanSpeechText(speechRemainder) || generatedText; agentStatus.textContent = speakingNow.length > 220 ? "..." + speakingNow.slice(-220) : speakingNow; }
       setEmotion(generatedText);
       const { sentences, remainder } = extractSentences(cleanSpeechText(speechRemainder));
       speechRemainder = remainder;
-      sentences.forEach((sentence) => {
+      sentences.forEach((sentence, i) => { void prefetchTts(sentences[i + 1], runId);
         void queueSpeech(sentence, runId);
       });
-    } else if (event.type === "done") {
-      completed = true;
+    } else if (event.type === "action") { showActionLink(event); } else if (event.type === "done") {
+      completed = true; if (event.serverMs && activeTurnMetrics) activeTurnMetrics.serverMs = event.serverMs;
     }
   }
 
@@ -590,7 +622,15 @@ async function readMuseStream(streamResponse, runId) {
   return generatedText;
 }
 
-function enqueueTurn(text) {
+function enqueueTurn(text, opts) {
+  hideActionLink();
+  const useChat = (opts && opts.chat) || chatIsOpen();
+  if (useChat && typeof text === "string" && text.trim()) {
+    ensureChatMode();
+    addChatBubble(text.trim(), "user");
+    addThinkingBubble();
+  }
+
   const question = typeof text === "string" ? text.trim() : "";
   if (!question) {
     return;
@@ -602,6 +642,7 @@ function enqueueTurn(text) {
   clearError();
   responseQueue.push({
     question,
+    chat: useChat,
     turnId: crypto.randomUUID(),
     metrics: {
       firstAudioCapturedAt,
@@ -626,12 +667,15 @@ async function processResponseQueue() {
     while (responseQueue.length) {
       const turn = responseQueue.shift();
       const { question, metrics } = turn;
+      const turnChatMode = !!turn.chat;
       const controller = new AbortController();
       const runId = speechRunId;
       activeResponseController = controller;
       responseInProgress = true;
       activeTurnMetrics = metrics;
       generatedResponse = "";
+      microphoneButton.disabled = true;
+      typeInput.disabled = true;
       stopResponseButton.disabled = false;
       setAgentState("thinking", "Thinking");
 
@@ -652,7 +696,7 @@ async function processResponseQueue() {
         const result = await fetch("/api/chat/stream", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ messages: responseMessages }),
+          body: JSON.stringify({ messages: responseMessages, session_id: sessionId, chat_mode: turnChatMode }),
           signal: controller.signal,
         });
         if (!result.ok) {
@@ -681,7 +725,7 @@ async function processResponseQueue() {
         } else {
           setAgentState(
             microphoneActive ? "listening" : "idle",
-            microphoneActive ? "Listening" : "Ready when you are",
+            microphoneActive ? "Listening" : "Ready when you are", answer && answer.length <= 200,
           );
         }
       } catch (error) {
@@ -693,6 +737,7 @@ async function processResponseQueue() {
         } else {
           showError(error instanceof Error ? error.message : "Voice-Pilot could not complete the response.");
           setAgentState("error", "Something went wrong");
+          chatTurnFailed();
         }
       } finally {
         if (activeResponseController === controller) {
@@ -700,19 +745,13 @@ async function processResponseQueue() {
         }
         responseInProgress = false;
         activeTurnMetrics = null;
+        microphoneButton.disabled = false;
+        typeInput.disabled = false;
         stopResponseButton.disabled = true;
       }
     }
   } finally {
-    responseQueueRunning = false;
-    if (listeningRequested && !microphoneActive && !sttSocket && !hasPendingTurn()) {
-      window.clearTimeout(sttReconnectTimer);
-      sttReconnectTimer = window.setTimeout(() => {
-        if (listeningRequested && !microphoneActive && !hasPendingTurn()) {
-          void startMicrophone();
-        }
-      }, 0);
-    }
+    responseQueueRunning = false; if (responseQueue.length) { void processResponseQueue(); } else if (listeningRequested && !sttHadError && !microphoneActive && !hasPendingTurn() && (!sttSocket || sttSocket.readyState >= WebSocket.CLOSING)) { window.setTimeout(() => { if (listeningRequested && !microphoneActive && !hasPendingTurn() && !sttHadError) { void startMicrophone().catch(() => {}); } }, 400); }
   }
 }
 
@@ -726,12 +765,70 @@ enableAudioButton.addEventListener("click", async () => {
     await ensureAudioContext();
     clearError();
     if (!responseInProgress) {
-      setAgentState(microphoneActive ? "listening" : "idle", "Voice replies are ready");
+      setAgentState(microphoneActive ? "listening" : "idle", "Voice replies are ready"); void preloadWelcomeIntro().then(() => playWelcomeIntro()).catch(() => {});
     }
   } catch (error) {
     showError(error instanceof Error ? error.message : "Audio could not be enabled.");
   }
 });
+
+function selectedMicId() {
+  try { return window.localStorage.getItem(MIC_STORAGE_KEY) || ""; } catch (error) { return ""; }
+}
+
+async function refreshMicList() {
+  if (!micSelect || !navigator.mediaDevices?.enumerateDevices) { return; }
+  let devices = [];
+  try { devices = await navigator.mediaDevices.enumerateDevices(); } catch (error) { return; }
+  const inputs = devices.filter((device) => device.kind === "audioinput");
+  const previous = micSelect.value || selectedMicId();
+  micSelect.textContent = "";
+  if (!inputs.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = "No microphone found — check the headset connection";
+    micSelect.appendChild(option);
+    return;
+  }
+  inputs.forEach((device, index) => {
+    const option = document.createElement("option");
+    option.value = device.deviceId || "";
+    option.textContent = device.label || `Microphone ${index + 1}`;
+    micSelect.appendChild(option);
+  });
+  const stillThere = inputs.some((device) => (device.deviceId || "") === previous);
+  const next = stillThere ? previous : (inputs[0]?.deviceId || "");
+  micSelect.value = next;
+  try { window.localStorage.setItem(MIC_STORAGE_KEY, next); } catch (error) {}
+}
+
+function stopMicLevelLoop() {
+  if (micLevelTimer) { window.clearInterval(micLevelTimer); micLevelTimer = null; }
+  micAnalyser = null;
+  if (micLevelBar) { micLevelBar.style.transform = "scaleX(0)"; }
+}
+
+function startMicLevelLoop() {
+  stopMicLevelLoop();
+  if (!micAnalyser || !micLevelBar) { return; }
+  micPeakLevel = 0;
+  micSilentHintShown = false;
+  const samples = new Float32Array(micAnalyser.fftSize);
+  const startedAt = performance.now();
+  micLevelTimer = window.setInterval(() => {
+    if (!microphoneActive || !micAnalyser) { stopMicLevelLoop(); return; }
+    micAnalyser.getFloatTimeDomainData(samples);
+    let sum = 0;
+    for (let index = 0; index < samples.length; index += 1) { sum += samples[index] * samples[index]; }
+    const rms = Math.sqrt(sum / samples.length);
+    micPeakLevel = Math.max(micPeakLevel, rms);
+    micLevelBar.style.transform = `scaleX(${Math.min(1, rms * 4).toFixed(3)})`;
+    if (!micSilentHintShown && performance.now() - startedAt > 8000 && micPeakLevel < 0.005) {
+      micSilentHintShown = true;
+      setAgentState("listening", "Listening — I can't hear anything. Check the microphone above.");
+    }
+  }, 150);
+}
 
 async function startMicrophone() {
   clearError();
@@ -761,7 +858,17 @@ async function startMicrophone() {
   firstAudioCapturedAt = null;
 
   // Parallel mic startup: permission plus device setup overlaps the STT handshake.
-  const micPromise = navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  const chosenMicId = (micSelect?.value || selectedMicId()).trim();
+  const baseAudio = { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+  const micConstraints = chosenMicId ? { ...baseAudio, deviceId: { exact: chosenMicId } } : { ...baseAudio };
+  let micPromise = navigator.mediaDevices.getUserMedia({ audio: micConstraints });
+  micPromise = micPromise.catch((micError) => {
+    if (chosenMicId && (micError?.name === "OverconstrainedError" || micError?.name === "NotFoundError")) {
+      showError("That microphone is no longer available. Using the default microphone instead.");
+      return navigator.mediaDevices.getUserMedia({ audio: { ...baseAudio } });
+    }
+    throw micError;
+  });
   micPromise.catch(() => {});
   micPromise.then((stream) => { if (sttSocket !== socket) { stream.getTracks().forEach((track) => track.stop()); } else { microphoneStream = stream; } }, () => {});
   const websocketProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -801,9 +908,15 @@ async function startMicrophone() {
       setAgentState("error", "Speech connection error");
     }
   };
-  socket.onclose = async () => {
+  socket.onclose = async (event) => {
     if (sttSocket !== socket) {
       return;
+    }
+    if (event && event.code !== 1000 && sttCloseReason !== "turn") {
+      sttHadError = true;
+      if (errorMessage.hidden) {
+        showError(`Speech connection closed unexpectedly (code ${event.code}).`);
+      }
     }
     sttReadyReject?.(new Error("The speech connection closed before recognition became ready."));
     sttReadyResolve = null;
@@ -818,7 +931,7 @@ async function startMicrophone() {
     microphoneButton.setAttribute("aria-label", "Start listening");
     microphoneButton.title = "Start listening";
     if (sttCloseReason === "turn") {
-      setAgentState(responseInProgress ? "thinking" : "idle", responseInProgress ? "Thinking" : "Ready when you are");
+      if (listeningRequested && !sttHadError && !microphoneActive && !hasPendingTurn() && (!sttSocket || sttSocket.readyState >= WebSocket.CLOSING)) { setAgentState("connecting", "Listening again"); window.setTimeout(() => { if (listeningRequested && !microphoneActive && !hasPendingTurn() && !sttHadError) { void startMicrophone().catch(() => {}); } }, 400); } else { setAgentState(responseInProgress ? "thinking" : "idle", responseInProgress ? "Thinking" : "Ready when you are"); }
     } else if (sttHadError && !errorMessage.hidden) {
       setAgentState("error", "Speech connection error");
     } else if (!responseInProgress) {
@@ -878,6 +991,9 @@ async function startMicrophone() {
   }
 
   const source = captureContext.createMediaStreamSource(microphoneStream);
+  micAnalyser = captureContext.createAnalyser();
+  micAnalyser.fftSize = 512;
+  source.connect(micAnalyser);
   audioProcessor = captureContext.createScriptProcessor(2048, 1, 1);
   silenceGain = captureContext.createGain();
   silenceGain.gain.value = 0;
@@ -914,15 +1030,196 @@ async function startMicrophone() {
   microphoneButton.disabled = false;
   microphoneButton.dataset.busy = "false";
   microphoneButton.classList.add("active");
+  startMicLevelLoop();
+  void refreshMicList();
   microphoneButton.setAttribute("aria-pressed", "true");
   microphoneButton.setAttribute("aria-label", "Stop listening");
   microphoneButton.title = "Stop listening";
   setAgentState("listening", "Listening");
 
   sessionLimitTimer = window.setTimeout(() => {
-    showError("The 10-minute listening limit was reached.");
+    listeningRequested = false; showError("The 10-minute listening limit was reached.");
     closeSttSocket();
   }, STT_SESSION_LIMIT_MS);
+}
+
+let meetingSlots = [];
+let meetingDate = "";
+let meetingTz = "";
+
+function showActionLink(event) {
+  if (!actionLine) return;
+  if (event && event.action === "meeting_slots" && Array.isArray(event.slots)) {
+    renderMeetingSlots(event);
+    return;
+  }
+  if (event && event.action === "meeting_form") {
+    if (!chatIsOpen()) openMeetingForm(event);
+    return;
+  }
+  if (event && event.action === "meeting_confirmation") {
+    showMeetingConfirmation(event);
+    return;
+  }
+  actionLine.innerHTML = "";
+  if (event && event.url) {
+    const link = document.createElement("a");
+    link.href = event.url;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = event.label || "Connect Google";
+    actionLine.append(document.createTextNode("Tap to continue: "), link);
+    actionLine.hidden = false;
+  }
+}
+
+function hideActionLink() {
+  if (actionLine) { actionLine.hidden = true; actionLine.innerHTML = ""; }
+}
+
+function renderMeetingSlots(event) {
+  meetingSlots = event.slots || [];
+  meetingDate = event.date || "";
+  meetingTz = event.timezone || "";
+  const panel = document.getElementById("slot-panel");
+  const cards = document.getElementById("slot-cards");
+  const heading = document.getElementById("slot-heading");
+  if (!panel || !cards) return;
+  cards.innerHTML = "";
+  if (heading && meetingDate) {
+    heading.textContent = `Available times for ${spokenDate(meetingDate)}${meetingTz ? ` (${meetingTz})` : ""}`;
+  }
+  for (const slot of meetingSlots) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "slot-card";
+    button.textContent = slot.label;
+    button.setAttribute("aria-label", `Book the ${slot.label} slot`);
+    button.addEventListener("click", () => chooseMeetingSlot(slot));
+    cards.append(button);
+  }
+  panel.hidden = meetingSlots.length === 0;
+  syncMeetingSlotOptions();
+}
+
+function openMeetingForm(detail) {
+  const wrap = document.getElementById("meeting-form-wrap");
+  if (!wrap) return;
+  if (detail && detail.timezone) {
+    meetingTz = detail.timezone;
+    syncMeetingSlotOptions();
+  }
+  if (detail && detail.start && detail.end) {
+    syncMeetingSlotOptions({ start: detail.start, end: detail.end });
+  }
+  if (detail && detail.prefill) {
+    const fieldMap = { topic: "mf-topic", meeting_type: "mf-type", name: "mf-name", email: "mf-email" };
+    for (const key of Object.keys(fieldMap)) {
+      const el = document.getElementById(fieldMap[key]);
+      if (el && !el.value && detail.prefill[key]) {
+        el.value = detail.prefill[key];
+      }
+    }
+  }
+  const when = document.getElementById("mf-when");
+  if (when && meetingDate) {
+    when.textContent = `${spokenDate(meetingDate)}${meetingTz ? ` (${meetingTz})` : ""} — your time is selected below.`;
+    when.hidden = false;
+  }
+  if (!wrap.hidden) return;
+  document.querySelector(".voice-stage")?.classList.add("split");
+  wrap.hidden = false;
+  requestAnimationFrame(() => wrap.classList.add("open"));
+  try {
+    wrap.scrollIntoView({ block: "nearest" });
+  } catch (e) {}
+  const firstEmpty = ["mf-name", "mf-email", "mf-topic"].map((id) => document.getElementById(id)).find((el) => el && !el.value);
+  const target = firstEmpty || document.getElementById("mf-name");
+  if (target && document.activeElement?.tagName !== "INPUT" && document.activeElement?.tagName !== "TEXTAREA") {
+    target.focus({ preventScroll: true });
+  }
+}
+
+function hideMeetingUi() {
+  const panel = document.getElementById("slot-panel");
+  const wrap = document.getElementById("meeting-form-wrap");
+  if (panel) panel.hidden = true;
+  if (wrap) { wrap.classList.remove("open"); wrap.hidden = true; }
+  if (!document.getElementById("slot-panel") || document.getElementById("slot-panel").hidden) {
+    document.querySelector(".voice-stage")?.classList.remove("split");
+  }
+}
+
+function chooseMeetingSlot(slot) {
+  syncMeetingSlotOptions(slot);
+  if (!chatIsOpen()) openMeetingForm();
+  enqueueTurn(`Book the ${slot.label} slot on ${meetingDate}.`);
+}
+
+function spokenDate(isoDate) {
+  const parsed = new Date(`${isoDate}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return isoDate;
+  return parsed.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+}
+
+function spokenSlot(label) {
+  const match = /^(\d{1,2}):(\d{2})\s*([AP]M)$/i.exec(label || "");
+  if (!match) return label;
+  const hour = parseInt(match[1], 10);
+  const suffix = match[3].toUpperCase();
+  return match[2] === "00" ? `${hour} ${suffix}` : `${hour}:${match[2]} ${suffix}`;
+}
+
+function syncMeetingSlotOptions(selected) {
+  const select = document.getElementById("mf-slot");
+  if (!select) return;
+  const wanted = selected
+    ? JSON.stringify({ start: selected.start, end: selected.end })
+    : select.value;
+  select.innerHTML = "";
+  const list = meetingSlots.length ? meetingSlots : (selected ? [selected] : []);
+  for (const slot of list) {
+    const option = document.createElement("option");
+    option.value = JSON.stringify({ start: slot.start, end: slot.end });
+    option.textContent = `${slot.label}${meetingDate ? ` — ${spokenDate(meetingDate)}` : ""}`;
+    select.append(option);
+  }
+  if (wanted) {
+    const has = Array.from(select.options).some((option) => option.value === wanted);
+    if (has) select.value = wanted;
+  }
+}
+
+function renderConfirmation(box, message, booking) {
+  box.innerHTML = "";
+  const check = document.createElement("span");
+  check.className = "confirm-check";
+  check.setAttribute("aria-hidden", "true");
+  check.textContent = "✓";
+  const content = document.createElement("span");
+  content.className = "confirm-content";
+  const text = document.createElement("span");
+  text.textContent = message;
+  content.append(text);
+  if (booking && booking.booking_id) {
+    const id = document.createElement("span");
+    id.className = "confirm-id";
+    id.textContent = `Booking ID ${booking.booking_id}`;
+    content.append(id);
+  }
+  box.append(check, content);
+}
+
+function showMeetingConfirmation(event) {
+  const box = document.getElementById("meeting-confirmation");
+  if (!box) return;
+  const booking = event.booking || {};
+  renderConfirmation(box, event.message || "Booked.", booking);
+  box.hidden = false;
+  hideMeetingUi();
+  try {
+    box.scrollIntoView({ block: "nearest" });
+  } catch (e) {}
 }
 
 function handleSttEvent(event) {
@@ -957,6 +1254,7 @@ function handleSttEvent(event) {
     case "speechComplete":
       if (!assistantSpeaking && !responseInProgress
         && typeof event.transcript === "string" && event.transcript.trim()) {
+        stopListeningForResponse();
         enqueueTurn(event.transcript);
       }
       break;
@@ -981,6 +1279,103 @@ function handleSttEvent(event) {
 
 faceButtons.desi.addEventListener("click", () => setFace("desi"));
 faceButtons.robo.addEventListener("click", () => setFace("robo"));
+
+typeForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  if (responseInProgress || responseQueueRunning) {
+    return;
+  }
+  const value = typeInput.value.trim();
+  if (!value) {
+    return;
+  }
+  clearError();
+  typeInput.value = "";
+  enqueueTurn(value, { chat: true });
+});
+const meetingForm = document.getElementById("meeting-form");
+if (meetingForm) {
+  syncMeetingSlotOptions();
+  meetingForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const errorBox = document.getElementById("mf-error");
+    const showFormError = (message) => {
+      if (errorBox) { errorBox.textContent = message; errorBox.hidden = false; }
+      else { showError(message); }
+    };
+    if (errorBox) errorBox.hidden = true;
+    let slot = null;
+    try { slot = JSON.parse(document.getElementById("mf-slot").value || "null"); }
+    catch (e) { slot = null; }
+    if (!slot || !slot.start || !slot.end) { showFormError("Please pick one of the available times."); return; }
+    const payload = {
+      session_id: sessionId,
+      name: document.getElementById("mf-name").value.trim(),
+      email: document.getElementById("mf-email").value.trim(),
+      phone: document.getElementById("mf-phone").value.trim(),
+      topic: document.getElementById("mf-topic").value.trim(),
+      meeting_type: document.getElementById("mf-type").value,
+      notes: document.getElementById("mf-notes").value.trim(),
+      timezone: meetingTz || Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+      start: slot.start,
+      end: slot.end,
+    };
+    if (payload.name.length < 2) { showFormError("Please share your full name so I can book the meeting."); return; }
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(payload.email)) { showFormError("That email address does not look valid. Please check it."); return; }
+    if (payload.topic.length < 2) { showFormError("Please share a short meeting topic."); return; }
+    stopCurrentAudio();
+    setBookingStatus("working", "Setting that up now — checking your slot, saving to calendar, and sending the confirmation.");
+    setAgentState("thinking", "Setting that up now: you will get confirmation once it is ready.");
+    try {
+      const bar = document.getElementById("booking-status");
+      if (bar) bar.scrollIntoView({ block: "nearest" });
+    } catch (e) {}
+    queueSpeech(
+      `Booking your ${payload.meeting_type} about ${payload.topic} on ${spokenDate(meetingDate)} at ${spokenSlot(slot.label)} for ${payload.name}.`,
+      speechRunId,
+    ).catch(() => {});
+    try {
+      const result = await fetch("/api/meetings/book", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = await result.json().catch(() => ({}));
+      if (!result.ok) {
+        throw new Error(typeof body.detail === "string" ? body.detail : "Booking failed.");
+      }
+      const box = document.getElementById("meeting-confirmation");
+      if (box) {
+        renderConfirmation(box, body.message || "Booked.", body.booking || {});
+        box.hidden = false;
+      }
+      hideMeetingUi();
+      setBookingStatus("done", body.message || "Booked.", body.booking || {});
+      try {
+        const doneBox = document.getElementById("meeting-confirmation");
+        if (doneBox) doneBox.scrollIntoView({ block: "nearest" });
+      } catch (e) {}
+      try {
+        await queueSpeech("Your meeting is booked. " + "Booking ID " + ((body.booking || {}).booking_id || "") + ".", speechRunId);
+      } catch (e) {}
+    } catch (error) {
+      setBookingStatus("error", error instanceof Error ? error.message : "Booking failed. Please try again.");
+      showFormError(error instanceof Error ? error.message : "Booking failed. Please try again.");
+    }
+  });
+  const cancelButton = document.getElementById("mf-cancel");
+  if (cancelButton) {
+    cancelButton.addEventListener("click", () => {
+      const form = document.getElementById("meeting-form");
+      if (form) form.reset();
+      syncMeetingSlotOptions();
+      hideMeetingUi();
+      ensureChatMode();
+      enqueueTurn("Cancel my meeting booking.", { chat: true });
+    });
+  }
+}
+initChatPane();
 setFace(storedFace());
 
 microphoneButton.addEventListener("click", async () => {
@@ -997,11 +1392,12 @@ microphoneButton.addEventListener("click", async () => {
     return;
   }
 
-  listeningRequested = true;
-  if (responseInProgress) {
-    setAgentState("thinking", "Finishing response");
+  if (responseInProgress || responseQueueRunning) {
+    setAgentState("thinking", "Thinking — microphone is off");
     return;
   }
+
+  listeningRequested = true;
 
   try {
     await startMicrophone();
@@ -1019,6 +1415,241 @@ microphoneButton.addEventListener("click", async () => {
     setAgentState("error", "Could not start listening");
   }
 });
+
+if (micSelect) {
+  micSelect.addEventListener("change", () => {
+    try { window.localStorage.setItem(MIC_STORAGE_KEY, micSelect.value || ""); } catch (error) {}
+    if (microphoneActive) {
+      listeningRequested = true;
+      if (sttSocket?.readyState === WebSocket.OPEN) {
+        try { sttSocket.send(JSON.stringify({ type: "stop" })); } catch (error) {}
+      } else {
+        closeSttSocket();
+        stopMicrophone();
+        microphoneActive = false;
+      }
+      window.setTimeout(() => {
+        if (listeningRequested && !microphoneActive && !hasPendingTurn()) {
+          void startMicrophone().catch(() => {});
+        }
+      }, 600);
+    }
+  });
+  if (navigator.mediaDevices?.addEventListener) {
+    navigator.mediaDevices.addEventListener("devicechange", () => { void refreshMicList(); });
+  }
+  void refreshMicList();
+}
+
+let bookingPhase = 0;
+let bookingStepTimer = null;
+let bookingStatusState = "idle";
+let bookingResult = null;
+
+const BOOKING_STEPS = [
+  { label: "Slot", active: "Checking your slot against the calendar…", done: "Slot verified and held." },
+  { label: "Save", active: "Saving to the calendar and queuing the confirmation mail…", done: "Saved to the calendar. Confirmation mail queued." },
+  { label: "Done", active: "Finishing up…", done: "" },
+];
+
+function setBookingStatus(state, message, booking) {
+  const bar = document.getElementById("booking-status");
+  if (!bar) return;
+  if (bookingStepTimer) { clearTimeout(bookingStepTimer); bookingStepTimer = null; }
+  bookingStatusState = state;
+  if (state === "working") {
+    bookingPhase = 0;
+    bookingResult = null;
+    renderBookingSteps();
+    bookingStepTimer = setTimeout(() => {
+      if (bookingStatusState !== "working") return;
+      bookingPhase = 1;
+      renderBookingSteps();
+    }, 1500);
+  } else if (state === "done") {
+    bookingPhase = 2;
+    bookingResult = { message, booking: booking || {} };
+    renderBookingSteps();
+  } else if (state === "error") {
+    bookingResult = { error: message };
+    renderBookingSteps();
+  }
+  bar.hidden = false;
+  bar.dataset.state = state;
+}
+
+function renderBookingSteps() {
+  const bar = document.getElementById("booking-status");
+  if (!bar) return;
+  bar.innerHTML = "";
+  const stepsEl = document.createElement("div");
+  stepsEl.className = "steps";
+  const detail = document.createElement("div");
+  detail.className = "steps-detail";
+  detail.hidden = true;
+  const showDetail = (text) => { detail.textContent = text; detail.hidden = false; };
+  BOOKING_STEPS.forEach((step, index) => {
+    let stepState = "pending";
+    if (bookingStatusState === "done") {
+      stepState = "done";
+    } else if (bookingStatusState === "error") {
+      stepState = index < bookingPhase ? "done" : index === bookingPhase ? "error" : "pending";
+    } else {
+      stepState = index < bookingPhase ? "done" : index === bookingPhase ? "active" : "pending";
+    }
+    let message = stepState === "done" ? step.done : stepState === "error" ? (bookingResult && bookingResult.error) || "Booking failed." : stepState === "active" ? step.active : "Waiting…";
+    if (index === 2 && stepState === "done" && bookingResult && bookingResult.booking) {
+      const id = bookingResult.booking.booking_id || "";
+      message = (bookingResult.message || "Booked.") + (id ? ` Booking ID ${id}.` : "");
+      const sheets = bookingResult.booking.sheets;
+      if (sheets && sheets !== "saved") message += ` Note: sheet ${sheets}.`;
+    }
+    const node = document.createElement("button");
+    node.type = "button";
+    node.className = "step";
+    node.dataset.stepState = stepState;
+    node.title = message;
+    node.setAttribute("aria-label", `${step.label}: ${message}`);
+    const icon = document.createElement("span");
+    icon.className = "step-icon";
+    icon.textContent = stepState === "done" ? "✓" : stepState === "error" ? "!" : String(index + 1);
+    icon.setAttribute("aria-hidden", "true");
+    const label = document.createElement("span");
+    label.className = "step-label";
+    label.textContent = step.label;
+    node.append(icon, label);
+    node.addEventListener("click", () => showDetail(`${step.label}: ${message}`));
+    stepsEl.append(node);
+  });
+  bar.append(stepsEl, detail);
+}
+
+function ensureChatMode() {
+  document.querySelector(".voice-stage")?.classList.add("split");
+  const pane = document.getElementById("chat-pane");
+  if (pane) pane.hidden = false;
+  const wrap = document.getElementById("meeting-form-wrap");
+  if (wrap && !wrap.hidden) {
+    wrap.classList.remove("open");
+    wrap.hidden = true;
+  }
+}
+
+function chatIsOpen() {
+  const pane = document.getElementById("chat-pane");
+  return !!pane && !pane.hidden;
+}
+
+function scrollThread() {
+  const thread = document.getElementById("chat-thread");
+  if (thread) thread.scrollTop = thread.scrollHeight;
+}
+
+function addChatBubble(text, kind) {
+  const thread = document.getElementById("chat-thread");
+  if (!thread || !text) return null;
+  const bubble = document.createElement("div");
+  bubble.className = `chat-msg ${kind}`;
+  bubble.textContent = text;
+  thread.append(bubble);
+  scrollThread();
+  return bubble;
+}
+
+let chatRunId = null;
+let assistantBubble = null;
+let thinkingBubbleEl = null;
+
+function addThinkingBubble() {
+  const thread = document.getElementById("chat-thread");
+  if (!thread) return;
+  if (thinkingBubbleEl) thinkingBubbleEl.remove();
+  thinkingBubbleEl = document.createElement("div");
+  thinkingBubbleEl.className = "chat-msg assistant thinking";
+  thinkingBubbleEl.textContent = "Raala is thinking…";
+  thread.append(thinkingBubbleEl);
+  scrollThread();
+  assistantBubble = null;
+  chatRunId = null;
+}
+
+function appendAssistantDelta(runId, text) {
+  const thread = document.getElementById("chat-thread");
+  if (!thread || !chatIsOpen()) return;
+  if (chatRunId !== runId || !assistantBubble) {
+    if (thinkingBubbleEl) {
+      thinkingBubbleEl.remove();
+      thinkingBubbleEl = null;
+    }
+    assistantBubble = document.createElement("div");
+    assistantBubble.className = "chat-msg assistant";
+    thread.append(assistantBubble);
+    chatRunId = runId;
+  }
+  assistantBubble.textContent += text;
+  scrollThread();
+}
+
+function chatTurnFailed() {
+  const thread = document.getElementById("chat-thread");
+  if (!thread || !chatIsOpen()) return;
+  if (thinkingBubbleEl) {
+    thinkingBubbleEl.remove();
+    thinkingBubbleEl = null;
+  }
+  if (!assistantBubble) {
+    assistantBubble = document.createElement("div");
+    assistantBubble.className = "chat-msg assistant";
+    thread.append(assistantBubble);
+  }
+  if (!assistantBubble.textContent.trim()) {
+    assistantBubble.textContent = "Sorry, that did not go through. Please try again.";
+  }
+  scrollThread();
+  chatRunId = null;
+  assistantBubble = null;
+}
+
+function initChatPane() {
+  const stage = document.querySelector(".voice-stage");
+  const anchor = document.querySelector(".howto");
+  if (!stage || !anchor || document.getElementById("chat-pane")) return;
+  const pane = document.createElement("section");
+  pane.id = "chat-pane";
+  pane.hidden = true;
+  pane.setAttribute("aria-label", "Chat");
+  pane.innerHTML = `<div class="chat-mode-tag">Chat mode</div><div id="chat-thread" class="chat-thread" aria-live="polite"></div>`;
+  stage.insertBefore(pane, anchor);
+  if (typeInput) {
+    typeInput.placeholder = "Chat mode — type a message…";
+    typeInput.setAttribute("aria-label", "Chat mode — type a message");
+  }
+}
+
+const startButton = document.getElementById("start-button");
+if (startButton) {
+  startButton.addEventListener("click", async () => {
+    startButton.disabled = true;
+    clearError();
+    setAgentState("connecting", "Getting things ready");
+    try {
+      await ensureAudioContext();
+      await preloadWelcomeIntro();
+      try {
+        await fetch("/api/meetings/availability");
+      } catch (e) {}
+      startButton.hidden = true;
+      await playWelcomeIntro();
+      if (!responseInProgress) {
+        setAgentState(microphoneActive ? "listening" : "idle", "Ready — tap the microphone and tell me when to meet");
+      }
+    } catch (error) {
+      startButton.disabled = false;
+      showError(error instanceof Error ? error.message : "Could not start. Please try again.");
+      setAgentState("error", "Could not start");
+    }
+  });
+}
 
 window.addEventListener("pagehide", () => {
   window.clearTimeout(sessionLimitTimer);

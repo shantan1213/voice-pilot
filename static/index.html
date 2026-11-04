@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Voice-Pilot — Your Voice Assistant</title>
   <meta name="theme-color" content="#f3f5ff" />
-  <link rel="stylesheet" href="/static/styles.css?v=12" />
+  <link rel="stylesheet" href="/static/styles.css?v=19" />
 </head>
 <body>
   <div class="bg-decor" aria-hidden="true">
@@ -36,6 +36,7 @@
   </div>
   <main>
     <header class="topbar">
+      <a class="meetings-link" href="/dashboard">Meetings</a>
       <a class="brand" href="/" aria-label="Voice-Pilot home">
         <span class="brand-mark" aria-hidden="true">R</span>
         <span>Raala</span>
@@ -45,7 +46,8 @@
 
     <section class="voice-stage" aria-labelledby="app-name">
       <h1 id="app-name">Voice-Pilot</h1>
-      <p id="agent-status" role="status" aria-live="polite" data-state="idle">Hello there! I'm Raala, your Voice-Pilot assistant. Tap the microphone and start speaking.</p>
+      <div class="agent-pane">
+      <p id="agent-status" role="status" aria-live="polite" data-state="idle">Hello, you have reached Raala. Tap the microphone and tell me when you would like to meet.</p>
 
       <div id="avatar" class="avatar" data-state="idle" data-emotion="calm" data-face="desi" role="img" aria-label="Voice-Pilot is idle">
         <div class="avatar-halo"></div>
@@ -144,17 +146,82 @@
           <path class="mouth mouth-confused" d="M107 186 C 113 182, 119 190, 125 182 C 130 186, 134 182, 137 186" fill="none" stroke="#5978b4" stroke-linecap="round" stroke-width="4" />
           <path class="mouth mouth-loving" d="M115 184 C 118 180, 122 180, 125 184 C 122 186, 118 186, 115 184 Z" fill="#e87a9a" stroke="#e87a9a" stroke-linecap="round" stroke-width="2" />
           <ellipse class="mouth mouth-focused" cx="120" cy="186" rx="5" ry="7" fill="#5978b4" />
-          <path d="M106 211 C 113 215, 127 215, 134 211" fill="none" stroke="#aac4f6" stroke-linecap="round" stroke-width="3" opacity=".8" />
+          <path d="M106 211 C 113 215, 127 215, 134 211" fill="none" stroke="#aac4f6" stroke-linecap="round" stroke-width="3" opacity=".8" /><g class="suit"><path d="M50 240 C 54 218, 76 206, 98 202 L 142 202 C 164 206, 186 218, 190 240 Z" fill="#2f3b57" stroke="#1d2639" stroke-width="2.5" /><path d="M98 202 L 142 202 L 132 226 L 120 240 L 108 226 Z" fill="#f4f7fd" stroke="#c9d4e8" stroke-width="1.5" /><path d="M98 202 L 112 202 L 104 228 L 88 222 Z" fill="#232d47" stroke="#1d2639" stroke-width="1.5" /><path d="M142 202 L 128 202 L 136 228 L 152 222 Z" fill="#232d47" stroke="#1d2639" stroke-width="1.5" /><path d="M112 200 L 128 200 L 125 210 L 115 210 Z" fill="#b0443f" /><path d="M115 210 L 125 210 L 128 240 L 112 240 Z" fill="#c14f4a" stroke="#a03a36" stroke-width="1" /></g>
         </svg>
         <div class="sound-rings" aria-hidden="true"><i></i><i></i><i></i></div>
       </div>
 
       <div class="controls">
+        <button id="start-button" class="start-button" type="button">Start</button>
         <button id="microphone-button" class="mic-button" type="button" aria-pressed="false" aria-label="Start listening">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2.5" width="6" height="12" rx="3"></rect><path d="M5.5 11.5v1a6.5 6.5 0 0 0 13 0v-1M12 19v3M9 22h6"></path></svg>
         </button>
         <button id="stop-response" class="interrupt-button" type="button" disabled>Stop response</button>
       </div>
+      <div class="mic-row">
+        <label class="mic-label" for="mic-select">Microphone</label>
+        <select id="mic-select" class="mic-select" aria-label="Choose microphone input"></select>
+        <span id="mic-level" class="mic-level" aria-hidden="true"><i></i></span>
+      </div>
+      <form id="type-box" class="type-box" autocomplete="off">
+        <input id="type-input" class="type-input meeting-time-input" type="text" name="typed-text"
+          placeholder="Type “schedule a meeting” or a time like 10 AM" maxlength="320"
+          aria-label="Type “schedule a meeting” or a time like 10 AM" />
+        <button class="type-send" type="submit">Send</button>
+      </form>
+
+      <p id="action-line" class="type-hint" hidden></p>
+      </div>
+      <div class="booking-pane">
+      <div id="booking-status" class="booking-status" role="status" aria-live="polite" hidden></div>
+      <div id="meeting-confirm-box" class="meeting-confirm-box" hidden aria-label="Confirm meeting booking">
+        <p id="mc-summary" class="meeting-confirm-summary"></p>
+        <div class="meeting-confirm-actions">
+          <button id="mc-confirm" class="meeting-submit" type="button">Confirm</button>
+          <button id="mc-decline" class="meeting-cancel" type="button">Decline</button>
+        </div>
+      </div>
+      <section id="slot-panel" class="slot-panel" hidden aria-label="Available meeting times">
+        <h2 id="slot-heading">Available times</h2>
+        <div id="slot-cards" class="slot-cards"></div>
+      </section>
+      <section id="meeting-form-wrap" class="meeting-form-wrap" hidden aria-label="Meeting details form">
+        <form id="meeting-form" class="meeting-form" novalidate>
+          <h2>Meeting details</h2>
+          <p id="mf-when" class="meeting-form-when" hidden></p>
+          <p class="meeting-form-sub">You can type, speak, or click. Changing the time is fine before you submit.</p>
+          <label>Full name <input id="mf-name" name="name" type="text" autocomplete="name" required maxlength="120" /></label>
+          <label>Email address <input id="mf-email" name="email" type="email" autocomplete="email" required maxlength="320" /></label>
+          <label>Phone (optional) <input id="mf-phone" name="phone" type="tel" autocomplete="tel" maxlength="40" /></label>
+          <label>Meeting time
+            <select id="mf-slot" name="slot" required></select>
+          </label>
+          <label>Meeting topic <input id="mf-topic" name="topic" type="text" required maxlength="200" placeholder="What should we discuss?" /></label>
+          <label>Meeting type
+            <select id="mf-type" name="meeting_type" required>
+              <option value="video call">Video call</option>
+              <option value="phone call">Phone call</option>
+              <option value="in-person">In-person</option>
+            </select>
+          </label>
+          <label>Notes (optional) <textarea id="mf-notes" name="notes" rows="2" maxlength="1000"></textarea></label>
+          <p id="mf-error" class="meeting-form-error" role="alert" hidden></p>
+          <div class="meeting-form-actions">
+            <button type="submit" class="meeting-submit">Book meeting</button>
+            <button type="button" id="mf-cancel" class="meeting-cancel">Cancel</button>
+          </div>
+        </form>
+      </section>
+      <div id="meeting-confirmation" class="meeting-confirmation" role="status" aria-live="polite" hidden></div>
+      </div>
+      <details class="howto">
+        <summary>How to schedule a meeting</summary>
+        <ol>
+          <li>Say "schedule a meeting" and pick one of the available times.</li>
+          <li>Fill the short form that appears, or just keep speaking.</li>
+          <li>Raala books it and confirms here with your booking ID.</li>
+        </ol>
+      </details>
       <div class="face-picker" role="group" aria-label="Choose face">
         <button id="face-desi" class="face-button" type="button" aria-pressed="true" aria-label="Raala classic face" title="Raala"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><ellipse cx="12" cy="15" rx="9" ry="2.5" fill="currentColor"/><path d="M6 15 C6 10.5 7.8 7.2 10 6.6 C11 6.3 11.6 7.2 12 7.2 C12.4 7.2 13 6.3 14 6.6 C16.2 7.2 18 10.5 18 15 Z" fill="currentColor" stroke="rgba(0,0,0,.15)" stroke-width="0.6"/><path d="M7 11 C9 10.2 15 10.2 17 11 V12.5 C15 11.8 9 11.8 7 12.5 Z" fill="rgba(0,0,0,.25)"/></svg></button>
         <button id="face-robo" class="face-button" type="button" aria-pressed="false" aria-label="Raala robot face" title="Raala"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="5" y="8" width="14" height="11" rx="3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="9" cy="13.5" r="1.6" fill="currentColor"/><circle cx="15" cy="13.5" r="1.6" fill="currentColor"/><path d="M12 8 L12 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="3.5" r="1.8" fill="currentColor"/></svg></button>
@@ -166,6 +233,6 @@
     <footer><span>Private on this device</span><span>Speech recognition &amp; AI require an internet connection</span></footer>
   </main>
 
-  <script src="/static/app.js?v=29"></script>
+  <script src="/static/app.js?v=39"></script>
 </body>
 </html>
