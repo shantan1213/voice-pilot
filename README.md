@@ -15,10 +15,9 @@ hear each completed sentence spoken by a locally hosted MMS-TTS model.
 
 ## 🎬 Demo video
 
-> **To add the demo:** save your recording as `docs/demo.mp4` in this repo —
-> it plays right here on GitHub, no code changes needed.
+[![Watch the Raala demo on YouTube](https://img.youtube.com/vi/j_mbenMeA10/hqdefault.jpg)](https://youtu.be/j_mbenMeA10)
 
-![Raala demo — schedule a meeting by voice](docs/demo.mp4)
+[▶️ Watch the demo video on YouTube](https://youtu.be/j_mbenMeA10)
 
 ## 🧭 Table of contents
 
@@ -306,7 +305,7 @@ completes. This test exercises text streaming, not browser audio playback.
 - Check `MODEL_API_KEY`, the configured model, network access to
   `https://api.meta.ai/v1/chat/completions`, and account model access.
 - Read the Uvicorn output for status and error type. Do not log or share
-  authorization headers.
+authorization headers.
 
 ### 🔊 No audible speech
 
